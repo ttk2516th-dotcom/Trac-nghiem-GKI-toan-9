@@ -93,6 +93,8 @@
         <p id="save-status" class="hidden text-sm text-gray-600 mb-3" role="status" aria-live="polite"></p>
         <button id="btn-save-retry" onclick="saveCompletedResult()" class="hidden mb-3 w-full border border-blue-600 text-blue-700 rounded-lg py-2">Gửi lại kết quả</button>
         <button id="btn-action" class="w-full bg-blue-600 hover:bg-blue-700 text-white font-bold py-2 px-4 rounded-lg transition duration-200"></button>
+        <button id="btn-retake-result" onclick="returnHomeForRetake()" disabled class="hidden mt-3 w-full border border-blue-600 text-blue-700 font-bold py-2 px-4 rounded-lg disabled:opacity-50">Về trang chủ &amp; Thi lại</button>
+        <p id="retake-note" class="hidden text-xs text-gray-500 mt-2">Có thể thi lại sau khi kết quả đã lưu. Bảng xếp hạng giữ thành tích tốt nhất theo họ tên và lớp.</p>
     </div>
 
     <div id="leaderboard-screen" class="hidden bg-white p-4 sm:p-8 rounded-xl shadow-lg w-full max-w-2xl">
@@ -108,6 +110,7 @@
         <p class="text-xs text-gray-500 mt-3">Top 5 toàn thể và tối đa 3 vị trí trước, 3 vị trí sau bạn. Mỗi học sinh lấy thành tích tốt nhất theo họ tên và lớp; dòng của bạn được tô xanh. Các dòng trùng chỉ hiện một lần.</p>
         <div class="flex flex-wrap gap-2 mt-5">
           <button id="rank-refresh" onclick="showLeaderboard()" class="bg-blue-600 text-white rounded-lg py-2 px-4">Cập nhật bảng</button>
+          <button id="btn-retake-rank" onclick="returnHomeForRetake()" disabled class="border border-blue-600 text-blue-700 rounded-lg py-2 px-4 disabled:opacity-50">Về trang chủ &amp; Thi lại</button>
           <button onclick="backToResult()" class="border rounded-lg py-2 px-4">Trở lại kết quả</button>
         </div>
     </div>
@@ -454,6 +457,8 @@
                     };
                     try { localStorage.setItem('quiz9_pending_v2', JSON.stringify(completedPayload)); } catch (_) {}
                 }
+                document.getElementById('btn-retake-result').classList.remove('hidden');
+                document.getElementById('retake-note').classList.remove('hidden');
                 saveCompletedResult();
             }
         }
@@ -525,7 +530,7 @@
                     status.textContent = 'Chưa lưu được kết quả hoặc chưa nhận được xác nhận. Bấm “Gửi lại kết quả”.';
                     document.getElementById('btn-save-retry').classList.remove('hidden');
                     return false;
-                } finally { savingPromise = null; }
+                } finally { savingPromise = null; updateRetakeButtons(); }
             })();
             return savingPromise;
         }
@@ -559,6 +564,7 @@
             document.getElementById('result-screen').classList.add('hidden');
             document.getElementById('leaderboard-screen').classList.remove('hidden');
             document.getElementById('rank-refresh').disabled = true;
+            updateRetakeButtons();
             document.getElementById('rank-status').textContent = 'Đang tải bảng xếp hạng…';
             window.scrollTo(0, 0);
             try {
@@ -569,7 +575,52 @@
             } finally {
                 rankLoading = false;
                 document.getElementById('rank-refresh').disabled = false;
+                updateRetakeButtons();
             }
+        }
+        function updateRetakeButtons() {
+            const disabled = !resultSaved || !!savingPromise || rankLoading;
+            ['btn-retake-result', 'btn-retake-rank'].forEach(id => {
+                document.getElementById(id).disabled = disabled;
+            });
+        }
+        function returnHomeForRetake() {
+            // Preserve the completed result until saving/reading has finished.
+            if (!resultSaved || savingPromise || rankLoading || !completedPayload) return;
+            const name = completedPayload.name;
+            const className = completedPayload.className;
+            clearInterval(timerInterval);
+            try { localStorage.removeItem('quiz9_pending_v2'); } catch (_) {}
+            student = {name: '', class: ''};
+            startedAtISO = null;
+            completedPayload = null;
+            resultSaved = false;
+            savingPromise = null;
+            rankLoading = false;
+            firstStartTime = null;
+            endTime = null;
+            roundStartedAt = null;
+            roundFinishedAt = null;
+            retryCount = 0;
+            wrongCounts = {};
+            currentQuestions = [];
+            currentIndex = 0;
+            timeLeft = 30;
+            hasAnswered = false;
+            results = {correct: 0, wrong: 0};
+            ['quiz-screen', 'result-screen', 'leaderboard-screen', 'result-stats',
+             'save-status', 'btn-save-retry', 'btn-retake-result', 'retake-note',
+             'btn-next', 'btn-restart-round', 'feedback-container', 'rank-table'].forEach(id => {
+                document.getElementById(id).classList.add('hidden');
+            });
+            document.getElementById('rank-body').replaceChildren();
+            document.getElementById('rank-status').textContent = '';
+            document.getElementById('student-name').value = name;
+            document.getElementById('student-class').value = className;
+            document.getElementById('login-screen').classList.remove('hidden');
+            updateRetakeButtons();
+            window.scrollTo(0, 0);
+            document.getElementById('student-name').focus();
         }
         function backToResult() {
             document.getElementById('leaderboard-screen').classList.add('hidden');
@@ -595,6 +646,8 @@
                 document.getElementById('result-end').textContent = durationLabel(pending.durationSeconds);
                 document.getElementById('btn-action').textContent = 'Xem bảng xếp hạng';
                 document.getElementById('btn-action').onclick = showLeaderboard;
+                document.getElementById('btn-retake-result').classList.remove('hidden');
+                document.getElementById('retake-note').classList.remove('hidden');
                 document.getElementById('save-status').classList.remove('hidden');
                 document.getElementById('save-status').textContent = 'Bấm “Gửi lại kết quả” để tiếp tục lưu.';
                 document.getElementById('btn-save-retry').classList.remove('hidden');
