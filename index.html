@@ -43,6 +43,11 @@
             </div>
         </div>
 
+        <div class="mb-4 flex flex-wrap justify-end gap-2">
+            <button id="btn-next" onclick="nextQuestion()" class="hidden bg-green-500 hover:bg-green-600 text-white font-bold py-2 px-6 rounded-lg transition duration-200">Câu mới</button>
+            <button id="btn-restart-round" onclick="restartRoundNow()" class="hidden bg-blue-600 hover:bg-blue-700 text-white font-bold py-2 px-4 rounded-lg transition duration-200">Bắt đầu lại vòng mới</button>
+        </div>
+
         <div class="min-h-[250px]">
             <h2 id="question-text" class="text-lg font-medium text-gray-800 mb-4 leading-relaxed"></h2>
             <div id="options-container" class="space-y-3"></div>
@@ -53,9 +58,7 @@
             <p id="feedback-explanation" class="text-gray-700 text-sm"></p>
         </div>
 
-        <div class="mt-6 text-right">
-            <button id="btn-next" onclick="nextQuestion()" class="hidden bg-green-500 hover:bg-green-600 text-white font-bold py-2 px-6 rounded-lg transition duration-200">Tiếp tục</button>
-        </div>
+
     </div>
 
     <!-- Screen 3: Results -->
@@ -75,10 +78,11 @@
             </div>
         </div>
         
-        <div class="bg-gray-100 p-4 rounded-lg mb-6 text-left space-y-2">
+        <div id="result-stats" class="hidden bg-gray-100 p-4 rounded-lg mb-6 text-left space-y-2">
             <p class="text-sm text-gray-600"><strong>Số vòng đã thử:</strong> <span id="result-retries"></span></p>
-            <p class="text-sm text-gray-600"><strong>Giờ bắt đầu:</strong> <span id="result-start"></span></p>
-            <p class="text-sm text-gray-600 hidden" id="result-end-container"><strong>Giờ hoàn thành:</strong> <span id="result-end"></span></p>
+            <p class="text-sm text-gray-600"><strong>Thời gian bắt đầu làm bài:</strong> <span id="result-start"></span></p>
+            <p class="text-sm text-gray-600"><strong>Thời gian kết thúc làm bài:</strong> <span id="result-finish"></span></p>
+            <p class="text-sm text-gray-600 hidden" id="result-end-container"><strong>Thời lượng vòng đạt 12/12:</strong> <span id="result-end"></span></p>
         </div>
 
         <button id="btn-action" class="w-full bg-blue-600 hover:bg-blue-700 text-white font-bold py-2 px-4 rounded-lg transition duration-200"></button>
@@ -179,6 +183,8 @@
         let student = { name: "", class: "" };
         let firstStartTime = null; 
         let endTime = null;
+        let roundStartedAt = null;
+        let roundFinishedAt = null;
         let retryCount = 0; 
         let wrongCounts = {}; 
 
@@ -225,10 +231,17 @@
         };
 
         function startRound() {
+            clearInterval(timerInterval);
+            document.getElementById('result-screen').classList.add('hidden');
+            document.getElementById('result-stats').classList.add('hidden');
+            document.getElementById('quiz-screen').classList.remove('hidden');
+            roundStartedAt = Date.now();
+            roundFinishedAt = null;
             currentQuestions = shuffle([...questionsData]);
             currentIndex = 0;
             results = { correct: 0, wrong: 0 };
             loadQuestion();
+            window.scrollTo(0, 0);
         }
 
         function loadQuestion() {
@@ -239,6 +252,7 @@
             document.getElementById('question-progress').textContent = `Câu ${currentIndex + 1}/${currentQuestions.length}`;
             document.getElementById('feedback-container').classList.add('hidden');
             document.getElementById('btn-next').classList.add('hidden');
+            document.getElementById('btn-restart-round').classList.add('hidden');
             
             const q = currentQuestions[currentIndex];
             document.getElementById('question-text').innerHTML = q.q;
@@ -272,7 +286,7 @@
             });
             // --- KẾT THÚC PHẦN TRỘN ĐÁP ÁN ---
 
-            if (window.MathJax) MathJax.typesetPromise();
+            if (window.MathJax && typeof MathJax.typesetPromise === 'function') MathJax.typesetPromise().catch(console.error);
 
             clearInterval(timerInterval);
             timerInterval = setInterval(() => {
@@ -288,6 +302,7 @@
         function selectOption(selectedIndex, btnElement, q) {
             if (hasAnswered) return;
             hasAnswered = true;
+            if (currentIndex === currentQuestions.length - 1) roundFinishedAt = Date.now();
             clearInterval(timerInterval);
             
             // Kiểm tra tính đúng/sai dựa trên vị trí mới đã trộn
@@ -327,10 +342,20 @@
             fbContainer.classList.remove('hidden');
             
             document.getElementById('btn-next').classList.remove('hidden');
-            if (window.MathJax) MathJax.typesetPromise();
+            document.getElementById('btn-restart-round').classList.remove('hidden');
+            if (window.MathJax && typeof MathJax.typesetPromise === 'function') MathJax.typesetPromise().catch(console.error);
         }
 
+        window.restartRoundNow = function() {
+            const restartButton = document.getElementById('btn-restart-round');
+            if (!hasAnswered || restartButton.classList.contains('hidden')) return;
+            restartButton.classList.add('hidden');
+            retryCount++;
+            startRound();
+        };
+
         window.nextQuestion = function() {
+            if (!hasAnswered || currentIndex >= currentQuestions.length) return;
             currentIndex++;
             if (currentIndex < currentQuestions.length) {
                 loadQuestion();
@@ -347,10 +372,11 @@
             document.getElementById('result-student').textContent = `${student.name} - ${student.class}`;
             document.getElementById('result-correct').textContent = results.correct;
             document.getElementById('result-wrong').textContent = results.wrong;
-            document.getElementById('result-retries').textContent = retryCount + " vòng";
+            document.getElementById('result-retries').textContent = (retryCount + 1) + " vòng";
             document.getElementById('result-start').textContent = firstStartTime;
 
             const isPassed = (results.correct === currentQuestions.length);
+            document.getElementById('result-stats').classList.toggle('hidden', !isPassed);
             const btnAction = document.getElementById('btn-action');
 
             if (!isPassed) {
@@ -368,12 +394,14 @@
             } else {
                 // ĐẠT 12/12
                 endTime = getCurrentTime();
+                document.getElementById('result-finish').textContent = endTime;
                 document.getElementById('result-title').textContent = "Vượt Ải Thành Công!";
                 document.getElementById('result-title').className = "text-3xl font-bold text-green-600 mb-2";
                 document.getElementById('result-message').textContent = "Tuyệt vời! Kết quả của bạn đã được gửi cho giáo viên.";
                 
                 document.getElementById('result-end-container').classList.remove('hidden');
-                document.getElementById('result-end').textContent = endTime;
+                const durationSeconds = Math.max(0, Math.ceil(((roundFinishedAt || Date.now()) - roundStartedAt) / 1000));
+                document.getElementById('result-end').textContent = `${Math.floor(durationSeconds / 60)} phút ${durationSeconds % 60} giây`;
                 
                 btnAction.textContent = "Đóng & Trở về trang chủ";
                 btnAction.onclick = () => location.reload();
