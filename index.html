@@ -5,11 +5,16 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Trắc nghiệm Toán 9 - Giữa Kỳ I (Vượt Ải)</title>
     <script src="https://cdn.tailwindcss.com"></script>
-    <script src="https://polyfill.io/v3/polyfill.min.js?features=es6"></script>
     <script id="MathJax-script" async src="https://cdn.jsdelivr.net/npm/mathjax@3/es5/tex-mml-chtml.js"></script>
     <style>
         body { font-family: 'Inter', sans-serif; background-color: #f3f4f6; }
         .mjx-chtml { margin: 0 !important; }
+        .hidden { display: none !important; }
+        .rank-table { width:100%; border-collapse:collapse; font-size:14px; }
+        .rank-table th, .rank-table td { padding:10px 7px; text-align:left; border-bottom:1px solid #e5e7eb; }
+        .rank-table th { background:#eff6ff; }
+        .rank-me { background:#dcfce7; font-weight:bold; }
+        .rank-gap td { height:24px; border:0; padding:0; }
     </style>
 </head>
 <body class="min-h-screen flex items-center justify-center p-4">
@@ -85,7 +90,26 @@
             <p class="text-sm text-gray-600 hidden" id="result-end-container"><strong>Thời lượng vòng đạt 12/12:</strong> <span id="result-end"></span></p>
         </div>
 
+        <p id="save-status" class="hidden text-sm text-gray-600 mb-3" role="status" aria-live="polite"></p>
+        <button id="btn-save-retry" onclick="saveCompletedResult()" class="hidden mb-3 w-full border border-blue-600 text-blue-700 rounded-lg py-2">Gửi lại kết quả</button>
         <button id="btn-action" class="w-full bg-blue-600 hover:bg-blue-700 text-white font-bold py-2 px-4 rounded-lg transition duration-200"></button>
+    </div>
+
+    <div id="leaderboard-screen" class="hidden bg-white p-4 sm:p-8 rounded-xl shadow-lg w-full max-w-2xl">
+        <h1 class="text-2xl font-bold text-blue-600 mb-2 text-center">Bảng xếp hạng</h1>
+        <p class="text-sm text-gray-600 mb-4 text-center">Ưu tiên thời lượng ngắn hơn; nếu bằng nhau, ưu tiên ít vòng hơn.</p>
+        <p id="rank-status" class="text-sm mb-4" role="status" aria-live="polite"></p>
+        <div style="overflow-x:auto">
+          <table id="rank-table" class="rank-table hidden">
+            <thead><tr><th>Hạng</th><th>Họ và tên</th><th>Lớp</th><th>Thời lượng đạt 12/12</th><th>Số vòng đã thử</th></tr></thead>
+            <tbody id="rank-body"></tbody>
+          </table>
+        </div>
+        <p class="text-xs text-gray-500 mt-3">Top 5 toàn thể và tối đa 3 vị trí trước, 3 vị trí sau bạn. Mỗi học sinh lấy thành tích tốt nhất theo họ tên và lớp; dòng của bạn được tô xanh. Các dòng trùng chỉ hiện một lần.</p>
+        <div class="flex flex-wrap gap-2 mt-5">
+          <button id="rank-refresh" onclick="showLeaderboard()" class="bg-blue-600 text-white rounded-lg py-2 px-4">Cập nhật bảng</button>
+          <button onclick="backToResult()" class="border rounded-lg py-2 px-4">Trở lại kết quả</button>
+        </div>
     </div>
 
     <script>
@@ -181,6 +205,11 @@
 
         // Trạng thái theo dõi chung
         let student = { name: "", class: "" };
+        let startedAtISO = null;
+        let completedPayload = null;
+        let resultSaved = false;
+        let savingPromise = null;
+        let rankLoading = false;
         let firstStartTime = null; 
         let endTime = null;
         let roundStartedAt = null;
@@ -220,7 +249,10 @@
                 return;
             }
 
-            if (!firstStartTime) firstStartTime = getCurrentTime(); 
+            if (!firstStartTime) {
+                firstStartTime = getCurrentTime();
+                startedAtISO = new Date().toISOString();
+            } 
 
             document.getElementById('login-screen').classList.add('hidden');
             document.getElementById('result-screen').classList.add('hidden');
@@ -234,6 +266,8 @@
             clearInterval(timerInterval);
             document.getElementById('result-screen').classList.add('hidden');
             document.getElementById('result-stats').classList.add('hidden');
+            document.getElementById('save-status').classList.add('hidden');
+            document.getElementById('btn-save-retry').classList.add('hidden');
             document.getElementById('quiz-screen').classList.remove('hidden');
             roundStartedAt = Date.now();
             roundFinishedAt = null;
@@ -397,38 +431,176 @@
                 document.getElementById('result-finish').textContent = endTime;
                 document.getElementById('result-title').textContent = "Vượt Ải Thành Công!";
                 document.getElementById('result-title').className = "text-3xl font-bold text-green-600 mb-2";
-                document.getElementById('result-message').textContent = "Tuyệt vời! Kết quả của bạn đã được gửi cho giáo viên.";
+                document.getElementById('result-message').textContent = "Tuyệt vời! Bạn đã hoàn thành 12/12 câu đúng.";
                 
                 document.getElementById('result-end-container').classList.remove('hidden');
                 const durationSeconds = Math.max(0, Math.ceil(((roundFinishedAt || Date.now()) - roundStartedAt) / 1000));
                 document.getElementById('result-end').textContent = `${Math.floor(durationSeconds / 60)} phút ${durationSeconds % 60} giây`;
                 
-                btnAction.textContent = "Đóng & Trở về trang chủ";
-                btnAction.onclick = () => location.reload();
-
-                // Dịch dữ liệu số lần sai sang dạng chuỗi (Ví dụ: "Câu 2: 1 lần, Câu 5: 3 lần")
-                let wrongDetailsStr = Object.keys(wrongCounts).length > 0 
-                    ? Object.keys(wrongCounts).map(id => `Câu ${id}: ${wrongCounts[id]} lần`).join(', ')
-                    : "Hoàn hảo (Không sai câu nào)";
-
-                // Gửi dữ liệu về Google Sheets
-                if (GOOGLE_SCRIPT_URL.includes("script.google.com")) {
-                    fetch(GOOGLE_SCRIPT_URL, {
-                        method: "POST",
-                        mode: "no-cors",
-                        headers: { "Content-Type": "text/plain;charset=utf-8" },
-                        body: JSON.stringify({
-                            name: student.name,
-                            className: student.class,
-                            startTime: firstStartTime,
-                            endTime: endTime,
-                            retries: retryCount,
-                            wrongDetails: wrongDetailsStr
-                        })
-                    }).catch(console.error);
+                btnAction.textContent = "Xem bảng xếp hạng";
+                btnAction.onclick = showLeaderboard;
+                if (!completedPayload) {
+                    completedPayload = {
+                        schema: 2,
+                        attemptId: (window.crypto && typeof window.crypto.randomUUID === 'function') ? window.crypto.randomUUID() : 'quiz_' + Date.now() + '_' + Math.random().toString(36).slice(2),
+                        name: student.name,
+                        className: student.class,
+                        startedAt: startedAtISO,
+                        finishedAt: new Date().toISOString(),
+                        rounds: retryCount + 1,
+                        durationSeconds: Math.max(1, durationSeconds),
+                        correct: 12,
+                        total: 12
+                    };
+                    try { localStorage.setItem('quiz9_pending_v2', JSON.stringify(completedPayload)); } catch (_) {}
                 }
+                saveCompletedResult();
             }
         }
+        function durationLabel(seconds) {
+            return `${Math.floor(seconds / 60)} phút ${seconds % 60} giây`;
+        }
+        function leaderboardRequest() {
+            return new Promise((resolve, reject) => {
+                const callback = 'quizCb_' + Date.now() + '_' + Math.random().toString(36).slice(2);
+                const script = document.createElement('script');
+                let done = false;
+                const cleanup = () => {
+                    clearTimeout(timeout);
+                    script.remove();
+                    // A late response after timeout must not call a deleted function.
+                    window[callback] = () => {};
+                    setTimeout(() => { delete window[callback]; }, 60000);
+                };
+                const finish = (error, data) => {
+                    if (done) return;
+                    done = true; cleanup();
+                    error ? reject(error) : resolve(data);
+                };
+                const timeout = setTimeout(() => finish(new Error('Kết nối quá thời gian. Hãy thử lại.')), 12000);
+                window[callback] = data => data && data.ok ? finish(null, data) : finish(new Error(data && data.error || 'Chưa đọc được bảng xếp hạng.'));
+                script.onerror = () => finish(new Error('Không kết nối được bảng xếp hạng.'));
+                const url = new URL(GOOGLE_SCRIPT_URL);
+                url.searchParams.set('action', 'leaderboard');
+                url.searchParams.set('attemptId', completedPayload.attemptId);
+                url.searchParams.set('callback', callback);
+                url.searchParams.set('_', Date.now());
+                script.src = url.toString();
+                document.head.appendChild(script);
+            });
+        }
+        function saveCompletedResult() {
+            if (!completedPayload) return Promise.resolve(false);
+            if (resultSaved) return Promise.resolve(true);
+            if (savingPromise) return savingPromise;
+            const status = document.getElementById('save-status');
+            status.classList.remove('hidden');
+            status.textContent = 'Đang lưu kết quả, vui lòng giữ trang này mở…';
+            document.getElementById('btn-save-retry').classList.add('hidden');
+            savingPromise = (async () => {
+                try {
+                    const controller = new AbortController();
+                    const timer = setTimeout(() => controller.abort(), 12000);
+                    try {
+                        await fetch(GOOGLE_SCRIPT_URL, {
+                            method: 'POST', mode: 'no-cors', signal: controller.signal,
+                            headers: {'Content-Type': 'text/plain;charset=utf-8'},
+                            body: JSON.stringify(completedPayload)
+                        });
+                    } catch (_) {
+                        // The server may have saved despite a network timeout. Confirm by ID.
+                    } finally { clearTimeout(timer); }
+                    for (let check = 0; check < 4; check++) {
+                        const data = await leaderboardRequest();
+                        if (data.saved) {
+                            resultSaved = true;
+                            status.textContent = 'Đã lưu kết quả vào bảng của giáo viên.';
+                            try { localStorage.removeItem('quiz9_pending_v2'); } catch (_) {}
+                            return true;
+                        }
+                        if (check < 3) await new Promise(resolve => setTimeout(resolve, 1800));
+                    }
+                    throw new Error('Chưa xác nhận được kết quả đã lưu.');
+                } catch (error) {
+                    status.textContent = 'Chưa lưu được kết quả hoặc chưa nhận được xác nhận. Bấm “Gửi lại kết quả”.';
+                    document.getElementById('btn-save-retry').classList.remove('hidden');
+                    return false;
+                } finally { savingPromise = null; }
+            })();
+            return savingPromise;
+        }
+        function renderLeaderboard(data) {
+            const body = document.getElementById('rank-body');
+            body.replaceChildren();
+            function addRow(row) {
+                const tr = document.createElement('tr');
+                if (row.isMe) tr.className = 'rank-me';
+                [row.rank, row.name + (row.isMe ? ' (Bạn)' : ''), row.className, durationLabel(row.durationSeconds), row.rounds].forEach(value => {
+                    const td = document.createElement('td');
+                    td.textContent = value; tr.appendChild(td);
+                });
+                body.appendChild(tr);
+            }
+            data.top.forEach(addRow);
+            if (data.nearby.length) {
+                const gap = document.createElement('tr'); gap.className = 'rank-gap';
+                const cell = document.createElement('td'); cell.colSpan = 5;
+                cell.setAttribute('aria-label', 'Nhóm vị trí quanh bạn'); gap.appendChild(cell); body.appendChild(gap);
+                data.nearby.forEach(addRow);
+            }
+            document.getElementById('rank-table').classList.remove('hidden');
+            document.getElementById('rank-status').textContent = data.myRank
+                ? `Bạn đang ở hạng ${data.myRank}/${data.total}. ` + (data.isPersonalBest ? '' : 'Bảng đang dùng thành tích tốt hơn của bạn từ lượt trước.')
+                : 'Chưa tìm thấy kết quả của bạn. Hãy trở lại kết quả và gửi lại.';
+        }
+        async function showLeaderboard() {
+            if (rankLoading || !completedPayload) return;
+            rankLoading = true;
+            document.getElementById('result-screen').classList.add('hidden');
+            document.getElementById('leaderboard-screen').classList.remove('hidden');
+            document.getElementById('rank-refresh').disabled = true;
+            document.getElementById('rank-status').textContent = 'Đang tải bảng xếp hạng…';
+            window.scrollTo(0, 0);
+            try {
+                if (!(await saveCompletedResult())) throw new Error('Chưa lưu được kết quả. Hãy trở lại kết quả để gửi lại.');
+                renderLeaderboard(await leaderboardRequest());
+            } catch (error) {
+                document.getElementById('rank-status').textContent = error.message;
+            } finally {
+                rankLoading = false;
+                document.getElementById('rank-refresh').disabled = false;
+            }
+        }
+        function backToResult() {
+            document.getElementById('leaderboard-screen').classList.add('hidden');
+            document.getElementById('result-screen').classList.remove('hidden');
+        }
+        // Recover an unsent completed result after an accidental refresh.
+        try {
+            const pending = JSON.parse(localStorage.getItem('quiz9_pending_v2') || 'null');
+            if (pending && pending.schema === 2 && pending.correct === 12 && pending.total === 12 && Number.isInteger(pending.durationSeconds) && pending.durationSeconds > 0 && Number.isInteger(pending.rounds) && pending.rounds > 0) {
+                completedPayload = pending;
+                document.getElementById('login-screen').classList.add('hidden');
+                document.getElementById('result-screen').classList.remove('hidden');
+                document.getElementById('result-title').textContent = 'Vượt Ải Thành Công!';
+                document.getElementById('result-student').textContent = pending.name + ' - ' + pending.className;
+                document.getElementById('result-message').textContent = 'Đã khôi phục kết quả hoàn thành chưa được xác nhận lưu.';
+                document.getElementById('result-correct').textContent = 12;
+                document.getElementById('result-wrong').textContent = 0;
+                document.getElementById('result-stats').classList.remove('hidden');
+                document.getElementById('result-retries').textContent = pending.rounds + ' vòng';
+                document.getElementById('result-start').textContent = new Date(pending.startedAt).toLocaleString('vi-VN');
+                document.getElementById('result-finish').textContent = new Date(pending.finishedAt).toLocaleString('vi-VN');
+                document.getElementById('result-end-container').classList.remove('hidden');
+                document.getElementById('result-end').textContent = durationLabel(pending.durationSeconds);
+                document.getElementById('btn-action').textContent = 'Xem bảng xếp hạng';
+                document.getElementById('btn-action').onclick = showLeaderboard;
+                document.getElementById('save-status').classList.remove('hidden');
+                document.getElementById('save-status').textContent = 'Bấm “Gửi lại kết quả” để tiếp tục lưu.';
+                document.getElementById('btn-save-retry').classList.remove('hidden');
+            }
+        } catch (_) {}
+
     </script>
 </body>
 </html>
