@@ -23,12 +23,8 @@
         .rank-table tr.rank-gold td { background:#fff7d6; }
         .rank-table tr.rank-silver td { background:#f1f5f9; }
         .rank-table tr.rank-bronze td { background:#fff0e3; }
-        .rank-medal { position:relative; display:inline-block; width:48px; height:48px; vertical-align:middle; }
+        .rank-medal { display:inline-block; width:48px; height:48px; vertical-align:middle; }
         .rank-medal img { display:block; width:100%; height:100%; object-fit:contain; filter:drop-shadow(0 2px 2px rgba(30,41,59,.28)); }
-        .rank-medal-number { position:absolute; left:50%; top:66%; transform:translate(-50%,-50%); font-size:15px; line-height:1; font-weight:900; text-shadow:0 1px 1px rgba(255,255,255,.65); }
-        .rank-medal-gold .rank-medal-number { color:#754600; }
-        .rank-medal-silver .rank-medal-number { color:#485363; }
-        .rank-medal-bronze .rank-medal-number { color:#743814; }
         .rank-gap td { height:24px; border:0; padding:0; }
     </style>
 </head>
@@ -692,20 +688,13 @@
                 tr.className = [placeClass, row.isMe ? 'rank-me' : ''].filter(Boolean).join(' ');
                 const rankCell = document.createElement('td');
                 if (place >= 1 && place <= 3) {
-                    const medal = document.createElement('span');
-                    medal.className = `rank-medal rank-medal-${placeClass.slice(5)}`;
-                    medal.setAttribute('role', 'img');
-                    medal.setAttribute('aria-label', `Huy chương ${place === 1 ? 'vàng' : place === 2 ? 'bạc' : 'đồng'}, hạng ${place}`);
                     const medalImage = document.createElement('img');
+                    medalImage.className = 'rank-medal';
                     medalImage.src = `medal-${place === 1 ? 'gold' : place === 2 ? 'silver' : 'bronze'}.png`;
-                    medalImage.alt = '';
-                    medalImage.setAttribute('aria-hidden', 'true');
-                    const number = document.createElement('span');
-                    number.className = 'rank-medal-number';
-                    number.textContent = String(place);
-                    number.setAttribute('aria-hidden', 'true');
-                    medal.append(medalImage, number);
-                    rankCell.appendChild(medal);
+                    medalImage.alt = `Huy chương ${place === 1 ? 'vàng' : place === 2 ? 'bạc' : 'đồng'}, hạng ${place}`;
+                    medalImage.width = 48;
+                    medalImage.height = 48;
+                    rankCell.appendChild(medalImage);
                 } else {
                     rankCell.textContent = String(row.rank);
                 }
