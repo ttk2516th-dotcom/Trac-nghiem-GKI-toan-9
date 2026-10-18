@@ -48,10 +48,23 @@
  </form>
 </section>
 <section id="teacher-screen" class="hidden bg-white p-5 sm:p-8 rounded-xl shadow-lg w-full max-w-4xl">
- <h1 class="text-2xl font-bold text-blue-700">Duyệt hồ sơ học sinh</h1>
- <p class="text-sm text-gray-600 mt-2">Đối chiếu thông tin học sinh trước khi duyệt. Có thể yêu cầu sửa lại hồ sơ đã duyệt.</p>
+ <h1 class="text-2xl font-bold text-blue-700">Khu vực giáo viên</h1>
+ <p class="text-sm text-gray-600 mt-2">Quản lý thời điểm mở ải cho học sinh và duyệt hồ sơ đăng ký.</p>
+ <section class="border rounded-xl p-4 sm:p-5 mt-5 bg-blue-50/50">
+  <div class="flex flex-wrap justify-between items-center gap-3">
+   <div><h2 class="text-xl font-bold text-gray-800">Quản lý ải</h2><p class="text-sm text-gray-600 mt-1">Ải bị khóa vẫn hiện với học sinh nhưng không thể bắt đầu. Kết quả và bảng xếp hạng được giữ nguyên; thầy có thể mở lại bất kỳ lúc nào.</p></div>
+   <button id="teacher-exam-refresh" onclick="loadTeacherExams()" class="bg-blue-600 text-white rounded-lg px-4 py-2">Tải lại danh sách ải</button>
+  </div>
+  <p id="teacher-exam-status" role="status" aria-live="polite" class="text-sm my-3"></p>
+  <div id="teacher-exams-list" class="grid grid-cols-1 md:grid-cols-2 gap-3"></div>
+  <p class="text-xs text-gray-500 mt-3">Muốn thêm ải mới, nhập ải bằng Excel với cột “Mở ải” chọn “Không”; sau đó tải lại danh sách và chỉ mở khi đã sẵn sàng.</p>
+ </section>
+ <div class="border-t mt-7 pt-5">
+ <h2 class="text-xl font-bold text-gray-800">Duyệt hồ sơ học sinh</h2>
+ <p class="text-sm text-gray-600 mt-1">Đối chiếu thông tin học sinh trước khi duyệt. Có thể yêu cầu sửa lại hồ sơ đã duyệt.</p>
  <div class="flex flex-wrap gap-3 my-4"><input id="profile-search" oninput="renderProfiles()" placeholder="Tìm tên, lớp hoặc email" aria-label="Tìm hồ sơ" class="border p-2 rounded-lg flex-1"><select id="profile-filter" onchange="renderProfiles()" class="border p-2 rounded-lg" aria-label="Lọc hồ sơ"><option value="pending">Chờ duyệt</option><option value="approved">Đã duyệt</option><option value="changes_requested">Cần sửa</option><option value="">Tất cả</option></select><button id="teacher-refresh" onclick="loadProfiles()" class="bg-blue-600 text-white p-2 rounded-lg">Tải lại</button></div>
  <p id="teacher-status" role="status" class="text-sm mb-4"></p><div id="profiles-list" class="space-y-4"></div>
+ </div>
 </section>
 
     <!-- Screen 1: Login -->
@@ -144,7 +157,6 @@
     <div id="leaderboard-screen" class="hidden bg-white p-4 sm:p-8 rounded-xl shadow-lg w-full max-w-2xl">
         <h1 class="text-2xl font-bold text-blue-600 mb-2 text-center">Bảng xếp hạng</h1>
         <p id="rank-exam-name" class="font-semibold text-center mb-3"></p>
-        <p class="text-sm text-gray-600 mb-4 text-center">Ưu tiên thời lượng ngắn hơn; nếu bằng nhau, ưu tiên ít vòng hơn.</p>
         <p id="rank-status" class="text-sm mb-4" role="status" aria-live="polite"></p>
         <div style="overflow-x:auto">
           <table id="rank-table" class="rank-table hidden">
@@ -152,7 +164,6 @@
             <tbody id="rank-body"></tbody>
           </table>
         </div>
-        <p class="text-xs text-gray-500 mt-3">Số vòng được cộng dồn mỗi khi bắt đầu làm một vòng mới, dù vòng đó đạt 12/12 hay chưa; tính riêng theo tài khoản và ải. Bảng hiển thị thành tích thời gian tốt nhất. Top 5 toàn thể và tối đa 3 vị trí trước, 3 vị trí sau bạn.</p>
         <div class="flex flex-wrap gap-2 mt-5">
           <button id="rank-refresh" onclick="showLeaderboard()" class="bg-blue-600 text-white rounded-lg py-2 px-4">Cập nhật bảng</button>
           <button id="btn-retake-rank" onclick="returnHomeForRetake()" disabled class="border border-blue-600 text-blue-700 rounded-lg py-2 px-4 disabled:opacity-50">Về trang chủ &amp; Thi lại</button>
@@ -520,7 +531,7 @@
             if (data.examId !== examId) throw new Error('Bảng xếp hạng chưa đúng ải. Vui lòng thử lại.');
             return data;
         }
-        let authUser=null, accountProfile=null, teacherProfiles=[], authVersion=0, authBusy=false;
+        let authUser=null, accountProfile=null, teacherProfiles=[], teacherExams=[], authVersion=0, authBusy=false;
         const firebaseConfig={apiKey:'AIzaSyDoaPGrDZG8UeEiOTQpBu98eoyPsR6KoDU',authDomain:'he-thong-vuot-ai-toan-9.firebaseapp.com',projectId:'he-thong-vuot-ai-toan-9',storageBucket:'he-thong-vuot-ai-toan-9.firebasestorage.app',messagingSenderId:'711701248089',appId:'1:711701248089:web:151863565bc67e37c85948'};
         let firebaseAuth=null;
         const pendingKey=()=> 'vuot_ai_auth_v1_'+(authUser?authUser.uid:'signed-out');
@@ -580,7 +591,7 @@
             accountProfile=data.profile;
             document.getElementById('account-label').textContent=(data.teacher?'Giáo viên · ':accountProfile?accountProfile.name+' · ':'')+data.email;
             document.getElementById('profile-form').classList.add('hidden');
-            if(data.teacher){document.getElementById('auth-screen').classList.add('hidden');document.getElementById('teacher-screen').classList.remove('hidden');await loadProfiles();return;}
+            if(data.teacher){document.getElementById('auth-screen').classList.add('hidden');document.getElementById('teacher-screen').classList.remove('hidden');await Promise.all([loadTeacherExams(),loadProfiles()]);return;}
             if(accountProfile&&accountProfile.status==='approved'){
               document.getElementById('student-name').value=accountProfile.name;document.getElementById('student-class').value=accountProfile.className;
               document.getElementById('auth-screen').classList.add('hidden');document.getElementById('login-screen').classList.remove('hidden');
@@ -607,6 +618,40 @@
           document.getElementById('teacher-status').textContent='Đang tải hồ sơ…';
           try{const data=await apiRequest('listProfiles');teacherProfiles=data.profiles;renderProfiles();}
           catch(error){document.getElementById('teacher-status').textContent=error.message;}finally{button.disabled=false;}
+        }
+        async function loadTeacherExams(){
+          const button=document.getElementById('teacher-exam-refresh');button.disabled=true;
+          document.getElementById('teacher-exam-status').textContent='Đang tải danh sách ải…';
+          try{const data=await apiRequest('teacherListExams');teacherExams=data.exams||[];renderTeacherExams();}
+          catch(error){document.getElementById('teacher-exam-status').textContent=error.message;}
+          finally{button.disabled=false;}
+        }
+        function renderTeacherExams(){
+          const list=document.getElementById('teacher-exams-list');list.replaceChildren();
+          const openCount=teacherExams.filter(e=>e.active&&e.valid).length,lockedCount=teacherExams.length-openCount;
+          document.getElementById('teacher-exam-status').textContent=`${teacherExams.length} ải · ${openCount} đang mở · ${lockedCount} đang khóa hoặc cần kiểm tra`;
+          if(!teacherExams.length){const empty=document.createElement('p');empty.className='text-sm text-gray-600';empty.textContent='Chưa có ải trong DanhSachDe. Hãy nhập bộ đề từ Excel trước.';list.appendChild(empty);return;}
+          for(const exam of teacherExams){
+            const card=document.createElement('article');card.className='bg-white border rounded-xl p-4 flex flex-col justify-between gap-3';
+            const heading=document.createElement('div');
+            const title=document.createElement('h3');title.className='font-bold text-gray-800';title.textContent=exam.name||'(Chưa có tên ải)';heading.appendChild(title);
+            const meta=document.createElement('p');meta.className='text-xs text-gray-500 mt-1';meta.textContent=`Mã ${exam.id} · ${exam.questionCount}/12 câu`+(Number.isFinite(Number(exam.seconds))?` · ${exam.seconds} giây/câu`:'');heading.appendChild(meta);
+            const state=document.createElement('p');state.className='text-sm mt-2 font-semibold '+(exam.active&&exam.valid?'text-green-700':'text-gray-600');state.textContent=exam.active&&exam.valid?'Đang mở cho học sinh':exam.active?'Đang bật nhưng nội dung cần kiểm tra':'Đang khóa · học sinh vẫn thấy, chưa thể bắt đầu';heading.appendChild(state);
+            if(!exam.valid){const error=document.createElement('p');error.className='text-xs text-red-700 mt-1';error.textContent=exam.error||'Bộ câu hỏi chưa hợp lệ.';heading.appendChild(error);}
+            card.appendChild(heading);
+            const button=document.createElement('button');button.type='button';
+            const willOpen=!exam.active;button.textContent=willOpen?'Mở ải cho học sinh':'Tạm khóa ải';
+            button.className='rounded-lg px-4 py-2 font-semibold '+(willOpen?'bg-green-700 text-white disabled:opacity-50':'bg-orange-100 text-orange-900');
+            button.disabled=willOpen&&!exam.valid;
+            button.onclick=async()=>{
+              const prompt=willOpen?`Mở “${exam.name}” cho học sinh làm?`:`Tạm khóa “${exam.name}”? Học sinh vẫn thấy thẻ ải nhưng không thể bắt đầu; kết quả và bảng xếp hạng cũ vẫn được giữ.`;
+              if(!confirm(prompt))return;
+              button.disabled=true;document.getElementById('teacher-exam-status').textContent='Đang cập nhật trạng thái ải…';
+              try{const result=await apiRequest('teacherSetExamActive',{examId:exam.id,active:willOpen});document.getElementById('teacher-exam-status').textContent=result.message;await loadTeacherExams();}
+              catch(error){document.getElementById('teacher-exam-status').textContent=error.message;button.disabled=false;}
+            };
+            card.appendChild(button);list.appendChild(card);
+          }
         }
         function renderProfiles(){
           const list=document.getElementById('profiles-list');list.replaceChildren();
@@ -839,8 +884,10 @@
 
         function setExamCardButtons(disabled, selectedId) {
             document.querySelectorAll('[data-exam-start]').forEach(button => {
-                button.disabled = disabled;
-                if (disabled && button.dataset.examStart === selectedId) button.textContent = 'Đang tải…';
+                const isOpen = button.dataset.examActive === 'true';
+                button.disabled = disabled || !isOpen;
+                if (!isOpen) button.textContent = 'Chưa mở';
+                else if (disabled && button.dataset.examStart === selectedId) button.textContent = 'Đang tải…';
                 else button.textContent = 'Bắt đầu';
             });
         }
@@ -862,9 +909,13 @@
                 const button = document.createElement('button');
                 button.type = 'button';
                 button.dataset.examStart = exam.id;
-                button.className = 'w-full bg-blue-600 hover:bg-blue-700 text-white font-bold py-2.5 px-4 rounded-xl transition disabled:opacity-60 disabled:cursor-wait';
-                button.textContent = 'Bắt đầu';
-                button.addEventListener('click', () => {
+                button.dataset.examActive = String(exam.active === true);
+                button.className = exam.active
+                    ? 'w-full bg-blue-600 hover:bg-blue-700 text-white font-bold py-2.5 px-4 rounded-xl transition disabled:opacity-60 disabled:cursor-wait'
+                    : 'w-full bg-gray-200 text-gray-500 font-bold py-2.5 px-4 rounded-xl cursor-not-allowed';
+                button.textContent = exam.active ? 'Bắt đầu' : 'Chưa mở';
+                button.disabled = !exam.active;
+                if (exam.active) button.addEventListener('click', () => {
                     document.getElementById('exam-select').value = exam.id;
                     startQuiz();
                 });
