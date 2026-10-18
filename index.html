@@ -18,7 +18,15 @@
         .rank-table { width:100%; border-collapse:collapse; font-size:14px; }
         .rank-table th, .rank-table td { padding:10px 7px; text-align:left; border-bottom:1px solid #e5e7eb; }
         .rank-table th { background:#eff6ff; }
-        .rank-me { background:#dcfce7; font-weight:bold; }
+        .rank-me { font-weight:bold; }
+        .rank-me td { box-shadow: inset 0 2px 0 #22c55e, inset 0 -2px 0 #22c55e; }
+        .rank-table tr.rank-gold td { background:#fff7d6; }
+        .rank-table tr.rank-silver td { background:#f1f5f9; }
+        .rank-table tr.rank-bronze td { background:#fff0e3; }
+        .rank-medal { display:inline-flex; width:34px; height:34px; align-items:center; justify-content:center; border-radius:50%; font-size:15px; font-weight:800; color:#fff; border:2px solid rgba(255,255,255,.95); box-shadow:0 1px 4px rgba(15,23,42,.25), inset 0 0 0 1px rgba(15,23,42,.12); }
+        .rank-medal-gold { background:linear-gradient(145deg,#ffe77a,#e6a700 70%,#c47c00); color:#684000; }
+        .rank-medal-silver { background:linear-gradient(145deg,#fff,#bfc9d5 70%,#8793a2); color:#344154; }
+        .rank-medal-bronze { background:linear-gradient(145deg,#ffd1a3,#c87532 70%,#91451f); color:#fff; }
         .rank-gap td { height:24px; border:0; padding:0; }
     </style>
 </head>
@@ -677,8 +685,22 @@
             body.replaceChildren();
             function addRow(row) {
                 const tr = document.createElement('tr');
-                if (row.isMe) tr.className = 'rank-me';
-                [row.rank, row.name + (row.isMe ? ' (Bạn)' : ''), row.className, durationLabel(row.durationSeconds), row.rounds].forEach(value => {
+                const place = Number(row.rank);
+                const placeClass = place === 1 ? 'rank-gold' : place === 2 ? 'rank-silver' : place === 3 ? 'rank-bronze' : '';
+                tr.className = [placeClass, row.isMe ? 'rank-me' : ''].filter(Boolean).join(' ');
+                const rankCell = document.createElement('td');
+                if (place >= 1 && place <= 3) {
+                    const medal = document.createElement('span');
+                    medal.className = `rank-medal rank-medal-${placeClass.slice(5)}`;
+                    medal.textContent = String(place);
+                    medal.setAttribute('role', 'img');
+                    medal.setAttribute('aria-label', `Huy chương ${place === 1 ? 'vàng' : place === 2 ? 'bạc' : 'đồng'}, hạng ${place}`);
+                    rankCell.appendChild(medal);
+                } else {
+                    rankCell.textContent = String(row.rank);
+                }
+                tr.appendChild(rankCell);
+                [row.name + (row.isMe ? ' (Bạn)' : ''), row.className, durationLabel(row.durationSeconds), row.rounds].forEach(value => {
                     const td = document.createElement('td');
                     td.textContent = value; tr.appendChild(td);
                 });
