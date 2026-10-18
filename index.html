@@ -61,12 +61,12 @@
                 <input type="text" id="student-class" readonly class="w-full border border-gray-300 rounded-lg px-4 py-2 focus:outline-none focus:ring-2 focus:ring-blue-500" placeholder="9A1">
             </div>
             <div>
-                <label for="exam-select" class="block text-gray-700 font-medium mb-1">Chọn ải luyện tập</label>
-                <select id="exam-select" disabled class="w-full border border-gray-300 rounded-lg px-3 py-2"><option value="">Đang tải danh sách ải…</option></select>
-                <p id="catalog-status" class="text-sm text-gray-600 mt-2" role="status"></p>
+                <h2 class="text-lg font-bold text-gray-800 mb-3">Chọn ải</h2>
+                <select id="exam-select" aria-hidden="true" tabindex="-1" class="hidden"><option value=""></option></select>
+                <div id="exam-cards" class="grid grid-cols-1 sm:grid-cols-2 gap-4" aria-live="polite"></div>
+                <p id="catalog-status" class="text-sm text-gray-600 mt-3" role="status"></p>
                 <button type="button" onclick="loadExamCatalog()" class="text-sm text-blue-700 underline mt-2">Tải lại danh sách ải</button>
             </div>
-            <button id="btn-start" disabled onclick="startQuiz()" class="w-full bg-blue-600 hover:bg-blue-700 text-white font-bold py-2 px-4 rounded-lg transition duration-200">Bắt đầu làm bài</button>
         </div>
     </div>
 
@@ -104,6 +104,7 @@
 
     <!-- Screen 3: Results -->
     <div id="result-screen" class="hidden bg-white p-8 rounded-xl shadow-lg w-full max-w-md text-center">
+        <img id="victory-trophy" src="trophy-victory.png" alt="Chiếc cúp chiến thắng" class="hidden w-36 h-36 sm:w-44 sm:h-44 object-contain mx-auto mb-3" width="176" height="176" fetchpriority="high">
         <h1 class="text-3xl font-bold text-gray-800 mb-2" id="result-title">Kết Quả</h1>
         <h2 id="result-student" class="text-lg text-blue-600 font-semibold mb-2"></h2>
         <p id="result-exam-name" class="text-sm font-semibold text-blue-600 mb-2"></p>
@@ -217,7 +218,7 @@
             const examId = document.getElementById('exam-select').value;
             if (!examId) { alert('Vui lòng chọn ải luyện tập.'); return; }
             startingQuiz = true;
-            document.getElementById('btn-start').disabled = true;
+            setExamCardButtons(true, examId);
             document.getElementById('catalog-status').textContent = 'Đang tải câu hỏi…';
             try {
                 const data = await apiRequest('questions', {examId});
@@ -231,7 +232,7 @@
                 return;
             } finally {
                 startingQuiz = false;
-                document.getElementById('btn-start').disabled = !examCatalog.length;
+                setExamCardButtons(false);
             }
             if (!firstStartTime) {
                 firstStartTime = getCurrentTime();
@@ -449,6 +450,7 @@
             document.getElementById('result-start').textContent = firstStartTime;
 
             const isPassed = (results.correct === currentQuestions.length);
+            document.getElementById('victory-trophy').classList.toggle('hidden', !isPassed);
             document.getElementById('result-stats').classList.toggle('hidden', !isPassed);
             const btnAction = document.getElementById('btn-action');
 
@@ -780,9 +782,10 @@
             catalogLoading = true;
             const select = document.getElementById('exam-select');
             const status = document.getElementById('catalog-status');
+            const cards = document.getElementById('exam-cards');
             const previous = completedPayload ? (completedPayload.examId || 'DE01') : select.value;
             select.disabled = true;
-            document.getElementById('btn-start').disabled = true;
+            setExamCardButtons(true);
             status.textContent = 'Đang tải danh sách ải…';
             try {
                 const data = await apiRequest('catalog');
@@ -792,23 +795,61 @@
                 for (const exam of examCatalog) {
                     const option = document.createElement('option');
                     option.value = exam.id;
-                    option.textContent = `${exam.name} · 12 câu · ${exam.seconds} giây/câu`;
+                    option.textContent = exam.name;
                     select.appendChild(option);
                 }
                 if (examCatalog.some(e => e.id === previous)) select.value = previous;
                 else if (examCatalog.length) select.value = examCatalog[0].id;
+                renderExamCards();
                 status.textContent = examCatalog.length
-                    ? 'Mỗi ải có bảng xếp hạng riêng.'
+                    ? 'Thành tích hiển thị là thời gian tốt nhất của em ở từng ải.'
                     : 'Chưa có ải sẵn sàng. Vui lòng liên hệ giáo viên.';
             } catch (error) {
                 examCatalog = [];
                 select.replaceChildren();
+                cards.replaceChildren();
                 status.textContent = 'Chưa tải được danh sách ải. ' + error.message;
             } finally {
                 catalogLoading = false;
                 select.disabled = !examCatalog.length;
-                document.getElementById('btn-start').disabled = !examCatalog.length;
+                setExamCardButtons(false);
             }
+        }
+
+        function setExamCardButtons(disabled, selectedId) {
+            document.querySelectorAll('[data-exam-start]').forEach(button => {
+                button.disabled = disabled;
+                if (disabled && button.dataset.examStart === selectedId) button.textContent = 'Đang tải…';
+                else button.textContent = 'Bắt đầu';
+            });
+        }
+
+        function renderExamCards() {
+            const container = document.getElementById('exam-cards');
+            container.replaceChildren();
+            examCatalog.forEach(exam => {
+                const card = document.createElement('article');
+                card.className = 'rounded-2xl border border-blue-100 bg-gradient-to-br from-white to-blue-50 p-4 shadow-sm flex flex-col justify-between min-h-40';
+                const title = document.createElement('h3');
+                title.className = 'font-bold text-gray-800 text-lg leading-snug';
+                title.textContent = exam.name;
+                const best = document.createElement('p');
+                best.className = 'text-sm text-gray-600 mt-3 mb-4';
+                best.textContent = Number.isInteger(exam.bestDurationSeconds) && exam.bestDurationSeconds > 0
+                    ? `Thành tích tốt nhất: ${durationLabel(exam.bestDurationSeconds)}`
+                    : 'Thành tích tốt nhất: Chưa có';
+                const button = document.createElement('button');
+                button.type = 'button';
+                button.dataset.examStart = exam.id;
+                button.className = 'w-full bg-blue-600 hover:bg-blue-700 text-white font-bold py-2.5 px-4 rounded-xl transition disabled:opacity-60 disabled:cursor-wait';
+                button.textContent = 'Bắt đầu';
+                button.addEventListener('click', () => {
+                    document.getElementById('exam-select').value = exam.id;
+                    startQuiz();
+                });
+                card.append(title, best, button);
+                container.appendChild(card);
+            });
         }
 
         function restorePending(){
@@ -825,6 +866,7 @@
                 document.getElementById('login-screen').classList.add('hidden');
                 document.getElementById('result-screen').classList.remove('hidden');
                 document.getElementById('result-title').textContent = 'Vượt Ải Thành Công!';
+                document.getElementById('victory-trophy').classList.remove('hidden');
                 document.getElementById('result-student').textContent = pending.name + ' - ' + pending.className;
                 document.getElementById('result-message').textContent = 'Đã khôi phục kết quả hoàn thành chưa được xác nhận lưu.';
                 document.getElementById('result-correct').textContent = 12;
