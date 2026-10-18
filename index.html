@@ -3,8 +3,13 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Trắc nghiệm Toán 9 - Giữa Kỳ I (Vượt Ải)</title>
+    <title>Trắc nghiệm Toán 9 – Chọn ải luyện tập</title>
     <script src="https://cdn.tailwindcss.com"></script>
+<script src="https://www.gstatic.com/firebasejs/12.4.0/firebase-app-compat.js"></script>
+<script src="https://www.gstatic.com/firebasejs/12.4.0/firebase-auth-compat.js"></script>
+    <script>
+      window.MathJax = { tex: { inlineMath: [['\\(', '\\)'], ['$', '$']], displayMath: [['\\[', '\\]'], ['$$', '$$']] } };
+    </script>
     <script id="MathJax-script" async src="https://cdn.jsdelivr.net/npm/mathjax@3/es5/tex-mml-chtml.js"></script>
     <style>
         body { font-family: 'Inter', sans-serif; background-color: #f3f4f6; }
@@ -17,21 +22,51 @@
         .rank-gap td { height:24px; border:0; padding:0; }
     </style>
 </head>
-<body class="min-h-screen flex items-center justify-center p-4">
+<body class="min-h-screen flex flex-col items-center justify-center p-4">
+
+<div id="account-bar" class="hidden w-full max-w-2xl flex justify-between items-center mb-4 text-sm gap-3">
+  <span id="account-label" class="break-all"></span><button onclick="logoutGoogle()" class="border rounded-lg px-3 py-2 bg-white shrink-0">Đăng xuất</button>
+</div>
+<section id="auth-screen" class="bg-white p-6 sm:p-8 rounded-xl shadow-lg w-full max-w-md">
+ <h1 class="text-2xl font-bold text-blue-700 mb-3">Vượt ải Toán 9</h1>
+ <p class="text-gray-600 mb-5">Đăng nhập bằng tài khoản Google của em để lưu hồ sơ và thành tích riêng.</p>
+ <button id="google-login" onclick="loginGoogle()" class="w-full bg-blue-600 text-white rounded-lg p-3 font-bold">Đăng nhập bằng Google</button>
+ <p id="auth-status" class="mt-4 text-sm" role="status">Đang kiểm tra đăng nhập…</p>
+ <button id="auth-refresh" onclick="refreshIdentity()" class="hidden underline text-blue-700 mt-3">Kiểm tra lại trạng thái hồ sơ</button>
+ <form id="profile-form" class="hidden mt-5 space-y-3" onsubmit="submitProfile(event)">
+  <label class="block">Họ và tên<input id="profile-name" required maxlength="100" autocomplete="name" class="block w-full border rounded-lg p-2 mt-1"></label>
+  <label class="block">Lớp<input id="profile-class" required maxlength="30" class="block w-full border rounded-lg p-2 mt-1" placeholder="Ví dụ: 9A1"></label>
+  <label class="block">Ngày sinh<input id="profile-dob" required type="date" min="1900-01-01" class="block w-full border rounded-lg p-2 mt-1"></label>
+  <p class="text-xs text-gray-500">Giáo viên xem hồ sơ để xác nhận. Email và ngày sinh không hiển thị trên bảng xếp hạng.</p>
+  <button id="profile-submit" class="w-full bg-blue-600 text-white rounded-lg p-3">Gửi hồ sơ để giáo viên duyệt</button>
+ </form>
+</section>
+<section id="teacher-screen" class="hidden bg-white p-5 sm:p-8 rounded-xl shadow-lg w-full max-w-4xl">
+ <h1 class="text-2xl font-bold text-blue-700">Duyệt hồ sơ học sinh</h1>
+ <p class="text-sm text-gray-600 mt-2">Đối chiếu thông tin học sinh trước khi duyệt. Có thể yêu cầu sửa lại hồ sơ đã duyệt.</p>
+ <div class="flex flex-wrap gap-3 my-4"><input id="profile-search" oninput="renderProfiles()" placeholder="Tìm tên, lớp hoặc email" aria-label="Tìm hồ sơ" class="border p-2 rounded-lg flex-1"><select id="profile-filter" onchange="renderProfiles()" class="border p-2 rounded-lg" aria-label="Lọc hồ sơ"><option value="pending">Chờ duyệt</option><option value="approved">Đã duyệt</option><option value="changes_requested">Cần sửa</option><option value="">Tất cả</option></select><button id="teacher-refresh" onclick="loadProfiles()" class="bg-blue-600 text-white p-2 rounded-lg">Tải lại</button></div>
+ <p id="teacher-status" role="status" class="text-sm mb-4"></p><div id="profiles-list" class="space-y-4"></div>
+</section>
 
     <!-- Screen 1: Login -->
-    <div id="login-screen" class="bg-white p-8 rounded-xl shadow-lg w-full max-w-md">
+    <div id="login-screen" class="hidden bg-white p-8 rounded-xl shadow-lg w-full max-w-md">
         <h1 class="text-2xl font-bold text-center text-blue-600 mb-6">Trắc Nghiệm Toán 9</h1>
         <div class="space-y-4">
             <div>
                 <label class="block text-gray-700 font-medium mb-1">Họ và Tên</label>
-                <input type="text" id="student-name" class="w-full border border-gray-300 rounded-lg px-4 py-2 focus:outline-none focus:ring-2 focus:ring-blue-500" placeholder="Nguyễn Văn A">
+                <input type="text" id="student-name" readonly class="w-full border border-gray-300 rounded-lg px-4 py-2 focus:outline-none focus:ring-2 focus:ring-blue-500" placeholder="Nguyễn Văn A">
             </div>
             <div>
                 <label class="block text-gray-700 font-medium mb-1">Lớp</label>
-                <input type="text" id="student-class" class="w-full border border-gray-300 rounded-lg px-4 py-2 focus:outline-none focus:ring-2 focus:ring-blue-500" placeholder="9A1">
+                <input type="text" id="student-class" readonly class="w-full border border-gray-300 rounded-lg px-4 py-2 focus:outline-none focus:ring-2 focus:ring-blue-500" placeholder="9A1">
             </div>
-            <button onclick="startQuiz()" class="w-full bg-blue-600 hover:bg-blue-700 text-white font-bold py-2 px-4 rounded-lg transition duration-200">Bắt đầu làm bài</button>
+            <div>
+                <label for="exam-select" class="block text-gray-700 font-medium mb-1">Chọn ải luyện tập</label>
+                <select id="exam-select" disabled class="w-full border border-gray-300 rounded-lg px-3 py-2"><option value="">Đang tải danh sách ải…</option></select>
+                <p id="catalog-status" class="text-sm text-gray-600 mt-2" role="status"></p>
+                <button type="button" onclick="loadExamCatalog()" class="text-sm text-blue-700 underline mt-2">Tải lại danh sách ải</button>
+            </div>
+            <button id="btn-start" disabled onclick="startQuiz()" class="w-full bg-blue-600 hover:bg-blue-700 text-white font-bold py-2 px-4 rounded-lg transition duration-200">Bắt đầu làm bài</button>
         </div>
     </div>
 
@@ -40,6 +75,7 @@
         <div class="flex justify-between items-center border-b pb-4 mb-4">
             <div>
                 <p id="student-info-display" class="font-bold text-gray-800"></p>
+                <p id="quiz-exam-name" class="text-sm font-semibold text-blue-600"></p>
                 <p id="question-progress" class="text-sm text-gray-500">Câu 1/12</p>
             </div>
             <div class="text-right">
@@ -70,6 +106,7 @@
     <div id="result-screen" class="hidden bg-white p-8 rounded-xl shadow-lg w-full max-w-md text-center">
         <h1 class="text-3xl font-bold text-gray-800 mb-2" id="result-title">Kết Quả</h1>
         <h2 id="result-student" class="text-lg text-blue-600 font-semibold mb-2"></h2>
+        <p id="result-exam-name" class="text-sm font-semibold text-blue-600 mb-2"></p>
         <p id="result-message" class="text-sm text-red-600 font-medium mb-6"></p>
         
         <div class="grid grid-cols-2 gap-4 mb-6">
@@ -84,7 +121,7 @@
         </div>
         
         <div id="result-stats" class="hidden bg-gray-100 p-4 rounded-lg mb-6 text-left space-y-2">
-            <p class="text-sm text-gray-600"><strong>Số vòng đã thử:</strong> <span id="result-retries"></span></p>
+            <p class="text-sm text-gray-600"><strong>Số vòng trong lượt thi này:</strong> <span id="result-retries"></span></p>
             <p class="text-sm text-gray-600"><strong>Thời gian bắt đầu làm bài:</strong> <span id="result-start"></span></p>
             <p class="text-sm text-gray-600"><strong>Thời gian kết thúc làm bài:</strong> <span id="result-finish"></span></p>
             <p class="text-sm text-gray-600 hidden" id="result-end-container"><strong>Thời lượng vòng đạt 12/12:</strong> <span id="result-end"></span></p>
@@ -94,20 +131,21 @@
         <button id="btn-save-retry" onclick="saveCompletedResult()" class="hidden mb-3 w-full border border-blue-600 text-blue-700 rounded-lg py-2">Gửi lại kết quả</button>
         <button id="btn-action" class="w-full bg-blue-600 hover:bg-blue-700 text-white font-bold py-2 px-4 rounded-lg transition duration-200"></button>
         <button id="btn-retake-result" onclick="returnHomeForRetake()" disabled class="hidden mt-3 w-full border border-blue-600 text-blue-700 font-bold py-2 px-4 rounded-lg disabled:opacity-50">Về trang chủ &amp; Thi lại</button>
-        <p id="retake-note" class="hidden text-xs text-gray-500 mt-2">Có thể thi lại sau khi kết quả đã lưu. Bảng xếp hạng giữ thành tích tốt nhất theo họ tên và lớp.</p>
+        <p id="retake-note" class="hidden text-xs text-gray-500 mt-2">Có thể thi lại sau khi kết quả đã lưu. Bảng xếp hạng giữ thành tích tốt nhất theo tài khoản Google và ải.</p>
     </div>
 
     <div id="leaderboard-screen" class="hidden bg-white p-4 sm:p-8 rounded-xl shadow-lg w-full max-w-2xl">
         <h1 class="text-2xl font-bold text-blue-600 mb-2 text-center">Bảng xếp hạng</h1>
+        <p id="rank-exam-name" class="font-semibold text-center mb-3"></p>
         <p class="text-sm text-gray-600 mb-4 text-center">Ưu tiên thời lượng ngắn hơn; nếu bằng nhau, ưu tiên ít vòng hơn.</p>
         <p id="rank-status" class="text-sm mb-4" role="status" aria-live="polite"></p>
         <div style="overflow-x:auto">
           <table id="rank-table" class="rank-table hidden">
-            <thead><tr><th>Hạng</th><th>Họ và tên</th><th>Lớp</th><th>Thời lượng đạt 12/12</th><th>Số vòng đã thử</th></tr></thead>
+            <thead><tr><th>Hạng</th><th>Họ và tên</th><th>Lớp</th><th>Thời lượng đạt 12/12</th><th>Tổng số vòng đã thử</th></tr></thead>
             <tbody id="rank-body"></tbody>
           </table>
         </div>
-        <p class="text-xs text-gray-500 mt-3">Top 5 toàn thể và tối đa 3 vị trí trước, 3 vị trí sau bạn. Mỗi học sinh lấy thành tích tốt nhất theo họ tên và lớp; dòng của bạn được tô xanh. Các dòng trùng chỉ hiện một lần.</p>
+        <p class="text-xs text-gray-500 mt-3">Số vòng được cộng dồn mỗi khi bắt đầu làm một vòng mới, dù vòng đó đạt 12/12 hay chưa; tính riêng theo tài khoản và ải. Bảng hiển thị thành tích thời gian tốt nhất. Top 5 toàn thể và tối đa 3 vị trí trước, 3 vị trí sau bạn.</p>
         <div class="flex flex-wrap gap-2 mt-5">
           <button id="rank-refresh" onclick="showLeaderboard()" class="bg-blue-600 text-white rounded-lg py-2 px-4">Cập nhật bảng</button>
           <button id="btn-retake-rank" onclick="returnHomeForRetake()" disabled class="border border-blue-600 text-blue-700 rounded-lg py-2 px-4 disabled:opacity-50">Về trang chủ &amp; Thi lại</button>
@@ -117,98 +155,20 @@
 
     <script>
         // Link Google Apps Script đã được cập nhật
-        const GOOGLE_SCRIPT_URL = "https://script.google.com/macros/s/AKfycbyjdpjUlcY9sfFNNJ7AqoWOONBpUbA5KPsH8iog76VQ2u9B0sNfheXILNqQuxSgBgCy5Q/exec";
+        const GOOGLE_SCRIPT_URL = "https://script.google.com/macros/s/AKfycbwvFSdrr-OwTUi3lC5c7TCaq2-klVouZvgDjoMWBanW66pUEa9pOdH_cNjc9IxtYmRuzQ/exec";
 
-        const questionsData = [
-            {
-                id: 1,
-                q: "Câu hỏi. Nghiệm của phương trình \\((2x-4)(3-9x)=0\\) là?",
-                options: ["A. \\(x=2\\) và \\(x=3\\)", "B. \\(x=3\\) và \\(x=\\frac{1}{2}\\)", "C. \\(x=2\\) và \\(x=\\frac{1}{3}\\)", "D. \\(x=\\frac{1}{2}\\) và \\(x=\\frac{1}{3}\\)"],
-                correct: 2,
-                explanation: "Nhập \\(2x-4\\) -> bấm Shift -> bấm CALC -> bấm \\(0\\) -> bấm \\(=\\). <br>Tương tự với \\(3-9x\\). <br>Đáp án C."
-            },
-            {
-                id: 2,
-                q: "Câu hỏi. Phương trình \\(\\frac{1}{x+1}-\\frac{x}{x^2-x+1}=\\frac{3x}{x^3+1}\\) có điều kiện xác định là?",
-                options: ["A. \\(x \\neq 1\\)", "B. \\(x \\neq -1\\)", "C. \\(x \\neq 1\\) và \\(x \\neq -1\\)", "D. \\(x \\neq 1\\) hoặc \\(x \\neq -1\\)"],
-                correct: 1,
-                explanation: "Mẫu số \\(x^3+1 = (x+1)(x^2-x+1)\\). Do \\(x^2-x+1 = (x-\\frac{1}{2})^2 + \\frac{3}{4} > 0\\) với mọi \\(x\\), nên ĐKXĐ chỉ cần \\(x+1 \\neq 0\\). <br>Nhập \\(x+1\\) -> bấm Shift -> bấm CALC -> bấm \\(0\\) -> bấm \\(=\\). <br>Đáp án B."
-            },
-            {
-                id: 3,
-                q: "Câu hỏi. Nghiệm của phương trình \\(\\frac{x+3}{x}=\\frac{x+9}{x-3}\\) là?",
-                options: ["A. \\(x=-1\\)", "B. \\(x=0\\)", "C. \\(x=1\\)", "D. \\(x=3\\)"],
-                correct: 0,
-                explanation: "Nhập \\(\\frac{x+3}{x}=\\frac{x+9}{x-3}\\) vào MTCT -> bấm Shift -> bấm CALC -> bấm \\(0\\) -> bấm \\(=\\). <br>Trường hợp không ra kết quả thì bấm mũi tên qua trái/phải rồi làm tương tự nhưng lần này ta nhập lại \\(1\\) rồi mới bấm \\(=\\). <br>Đáp án A."
-            },
-            {
-                id: 4,
-                q: "Câu hỏi. Phương trình nào sau đây không là phương trình bậc nhất hai ẩn?",
-                options: ["A. \\(2x+3y=5\\)", "B. \\(2x+0y=5\\)", "C. \\(0x+0y=5\\)", "D. \\(0x+3y=5\\)"],
-                correct: 2,
-                explanation: "Phương trình bậc nhất hai ẩn có dạng \\(ax+by=c\\) trong đó \\(a\\) và \\(b\\) không đồng thời bằng 0. <br>Ngoài ra nếu ẩn nằm dưới dâu căn/ dưới mẫu/ mũ cao thì đều không phải là phương trình bậc nhất hai ẩn. <br>Đáp án C."
-            },
-            {
-                id: 5,
-                q: "Câu hỏi. Nghiệm của hệ phương trình \\(\\begin{cases} \\frac{x}{2}-2y=-5 \\\\ 3x+\\frac{2y}{3}=8 \\end{cases}\\) là?",
-                options: ["A. \\((x;y)=(-2;-3)\\)", "B. \\((x;y)=(-3;-2)\\)", "C. \\((x;y)=(2;3)\\)", "D. \\((x;y)=(3;2)\\)"],
-                correct: 2,
-                explanation: "MTCT đời cũ thì bấm: MODE -> 5 -> 1. <br>MTCT đời mới thì bấm: MENU -> 9 -> 1 -> 2. <br>Đáp án C."
-            },
-            {
-                id: 6,
-                q: "Câu hỏi. Hệ thức nào sau đây là bất đẳng thức?",
-                options: ["A. \\(2a+7b=9\\)", "B. \\(2+7=9\\)", "C. \\(2a+7=9\\)", "D. \\(2a+7 \\ge 9\\)"],
-                correct: 3,
-                explanation: "Bất đẳng thức là hệ thức có chứa các dấu \\(>, <, \\ge, \\le\\). <br>Đáp án D."
-            },
-            {
-                id: 7,
-                q: "Câu hỏi. Bất phương trình nào sau đây có nghiệm là \\(x>5\\)?",
-                options: ["A. \\(10-2x>0\\)", "B. \\(10-2x<0\\)", "C. \\(10x-2>0\\)", "D. \\(10x-2<0\\)"],
-                correct: 1,
-                explanation: "Nhận diện: Đây là dạng cho nghiệm -> Hỏi bất phương trình. <br>Trước tiên xét chiều của các phương trình. Chiều \\(>\\) không thể tạo ra chiều \\(\\ge\\); Chiều \\(<\\) không thể tạo ra chiều \\(\\le\\). Chuyển hết \\(x\\) sang vế trái và thu gọn xem kết quả là số âm hay số dương, nếu dương thì giữ nguyên chiều của nghiệm, nếu âm thì đổi chiều của nghiệm. <br>Trường hợp vẫn chưa chọn được đáp án lúc này mới xét đến giá trị nghiệm, ta bấm giải nghiệm từng BPT nhưng đổi dấu của BPT thành dấu \\(=\\). <br>Đáp án B."
-            },
-            {
-                id: 8,
-                q: "Câu hỏi. Khi trừ cả hai vế của bất đẳng thức \\(a>b\\) cho c. Khẳng định nào sau đây đúng?",
-                options: ["A. \\(a-c < b-c\\)", "B. \\(a-c > b-c\\)", "C. \\(a-c \\le b-c\\)", "D. \\(a.c \\ge b.c\\)"],
-                correct: 1,
-                explanation: "BĐT chỉ đổi chiều khi xảy ra một trong hai trường hợp sau:<br>Trường hợp 1: Khi nhân/chia cả hai vế của BĐT với số âm; <br>Trường hợp 2: Khi cả hai vế của BĐT bị chia bởi cùng một số dương. <br>Đáp án B."
-            },
-            {
-                id: 9,
-                q: "Câu hỏi. Cho \\(0 < a < b\\). Khẳng định nào sau đây là đúng?",
-                options: ["A. \\(\\frac{1}{a} < \\frac{1}{b}\\)", "B. \\(\\frac{1}{a} > \\frac{1}{b}\\)", "C. \\(\\frac{1}{a} \\le \\frac{1}{b}\\)", "D. \\(\\frac{1}{a} = \\frac{1}{b}\\)"],
-                correct: 1,
-                explanation: "BĐT chỉ đổi chiều khi xảy ra một trong hai trường hợp sau:<br>Trường hợp 1: Khi nhân/chia cả hai vế của BĐT với số âm; <br>Trường hợp 2: Khi cả hai vế của BĐT bị chia bởi cùng một số dương. <br>Đáp án B."
-            },
-            {
-                id: 10,
-                q: "Câu hỏi. Cho tam giác ABC vuông tại A. Khẳng định nào sau đây đúng khi phát biểu về \\(\\sin B\\)?",
-                options: ["A. \\(\\sin B = \\frac{AC}{AB}\\)", "B. \\(\\sin B = \\frac{AB}{AC}\\)", "C. \\(\\sin B = \\frac{AC}{BC}\\)", "D. \\(\\sin B = \\frac{AB}{BC}\\)"],
-                correct: 2,
-                explanation: "Trong tam giác vuông, \\(\\sin\\alpha\\) bằng cạnh đối chia cạnh huyền; \\(\\cos\\alpha\\) bằng cạnh kề chia cạnh huyền; \\(\\tan\\alpha\\) bằng cạnh đối chia cạnh kề; \\(\\cot\\alpha\\) bằng cạnh kề chia cạnh đối.<br>Kỹ thuật xác định nhanh cạnh huyền, cạnh đối và cạnh kề:<br>+ Cạnh huyền là tên tam giác nhưng bỏ vuông<br>+ Cạnh đối của góc là tên tam giác nhưng bỏ góc đó<br>+ Cạnh huyền của góc là lấy vuông và lấy góc đó.<br>Đáp án C."
-            },
-            {
-                id: 11,
-                q: "Câu hỏi. Cho góc nhọn \\(\\alpha\\) thoả mãn \\(\\tan \\alpha = \\frac{4}{3}\\). Khẳng định nào sau đây đúng?",
-                options: ["A. \\(\\sin(90^\\circ - \\alpha) = \\frac{4}{3}\\)", "B. \\(\\cos(90^\\circ - \\alpha) = \\frac{4}{3}\\)", "C. \\(\\tan(90^\\circ - \\alpha) = \\frac{4}{3}\\)", "D. \\(\\cot(90^\\circ - \\alpha) = \\frac{4}{3}\\)"],
-                correct: 3,
-                explanation: "Ta có tính chất 2 góc phụ nhau: \\(\\sin = \\cos\\) và \\(\\tan = \\cot\\); <br>góc phụ với góc \\(\\alpha\\) là góc \\((90^\\circ - \\alpha)\\). <br>Đáp án D."
-            },
-            {
-                id: 12,
-                q: "Câu hỏi. Giá trị của \\(\\cot 31^\\circ 32'\\) khi làm tròn đến chữ số thập phân thứ 2 là?",
-                options: ["A. 1,63", "B. 0,61", "C. 0,85", "D. 1,62"],
-                correct: 0,
-                explanation: "Sử dụng MTCT. Trước tiên đảm bảm máy đang hiện chế độ là 'D'. Bấm \\(\\sin/\\cos/\\tan\\) -> Bấm số đo góc kèm đơn vị -> bấm ) -> bấm \\(^\\circ\\) -> Bấm \\(=\\). <br>Làm tròn đến chữ số thập phân thứ 2 là 1,63. <br>Đáp án A."
-            }
-        ];
+        let questionsData = [];
+        let selectedExam = null;
+        let examCatalog = [];
+        let catalogLoading = false;
+        let startingQuiz = false;
+        let startingRound = false;
 
         // Trạng thái theo dõi chung
         let student = { name: "", class: "" };
         let startedAtISO = null;
+        let activeSessionId = null;
+        let pendingRoundId = null;
         let completedPayload = null;
         let resultSaved = false;
         let savingPromise = null;
@@ -243,35 +203,96 @@
             return now.toLocaleTimeString('vi-VN') + ' - ' + now.toLocaleDateString('vi-VN');
         }
 
-        window.startQuiz = function() {
-            student.name = document.getElementById('student-name').value.trim();
-            student.class = document.getElementById('student-class').value.trim();
+        window.startQuiz = async function() {
+            if (startingQuiz) return;
+            if(!authUser||!accountProfile||accountProfile.status!=='approved'){alert('Hồ sơ chưa được duyệt.');return;}
+            student.name = accountProfile.name;
+            student.class = accountProfile.className;
             
             if (!student.name || !student.class) {
                 alert("Vui lòng nhập đầy đủ Họ Tên và Lớp!"); 
                 return;
             }
 
+            const examId = document.getElementById('exam-select').value;
+            if (!examId) { alert('Vui lòng chọn ải luyện tập.'); return; }
+            startingQuiz = true;
+            document.getElementById('btn-start').disabled = true;
+            document.getElementById('catalog-status').textContent = 'Đang tải câu hỏi…';
+            try {
+                const data = await apiRequest('questions', {examId});
+                if (!data.exam || data.exam.id !== examId || !Array.isArray(data.questions) || data.questions.length !== 12) throw new Error('Chưa tải đủ 12 câu của ải đã chọn.');
+                selectedExam = data.exam;
+                questionsData = data.questions;
+                document.getElementById('quiz-exam-name').textContent = selectedExam.name;
+                document.getElementById('catalog-status').textContent = '';
+            } catch (error) {
+                document.getElementById('catalog-status').textContent = error.message;
+                return;
+            } finally {
+                startingQuiz = false;
+                document.getElementById('btn-start').disabled = !examCatalog.length;
+            }
             if (!firstStartTime) {
                 firstStartTime = getCurrentTime();
                 startedAtISO = new Date().toISOString();
             } 
 
-            document.getElementById('login-screen').classList.add('hidden');
-            document.getElementById('result-screen').classList.add('hidden');
-            document.getElementById('quiz-screen').classList.remove('hidden');
-            document.getElementById('student-info-display').textContent = `${student.name} - ${student.class}`;
-
-            startRound();
+            activeSessionId = createRoundToken();
+            await startRound();
         };
 
-        function startRound() {
+        function createRoundToken() {
+            return 'r_' + ((window.crypto && typeof window.crypto.randomUUID === 'function')
+                ? window.crypto.randomUUID()
+                : Date.now() + '_' + Math.random().toString(36).slice(2) + '_' + Math.random().toString(36).slice(2));
+        }
+
+        async function startRound() {
+            if (startingRound) return false;
+            startingRound = true;
+            const status = document.getElementById('catalog-status');
+            status.textContent = 'Đang ghi nhận vòng làm bài…';
+            const restartButton = document.getElementById('btn-restart-round');
+            const actionButton = document.getElementById('btn-action');
+            restartButton.disabled = true;
+            actionButton.disabled = true;
+            if (!pendingRoundId) pendingRoundId = createRoundToken();
+            try {
+                await apiRequest('recordRoundStart', {
+                    examId: selectedExam.id,
+                    roundId: pendingRoundId,
+                    sessionId: activeSessionId
+                });
+            } catch (error) {
+                const message = 'Chưa ghi nhận được vòng này: ' + error.message + ' Hãy thử lại khi mạng ổn định.';
+                if (!document.getElementById('result-screen').classList.contains('hidden')) {
+                    const saveStatus = document.getElementById('save-status');
+                    saveStatus.textContent = message;
+                    saveStatus.classList.remove('hidden');
+                } else if (!document.getElementById('quiz-screen').classList.contains('hidden')) {
+                    document.getElementById('feedback-explanation').textContent = message;
+                    document.getElementById('feedback-container').classList.remove('hidden');
+                } else status.textContent = message;
+                restartButton.disabled = false;
+                restartButton.classList.remove('hidden');
+                actionButton.disabled = false;
+                startingRound = false;
+                return false;
+            }
+            pendingRoundId = null;
+            startingRound = false;
+            status.textContent = '';
             clearInterval(timerInterval);
             document.getElementById('result-screen').classList.add('hidden');
             document.getElementById('result-stats').classList.add('hidden');
             document.getElementById('save-status').classList.add('hidden');
             document.getElementById('btn-save-retry').classList.add('hidden');
             document.getElementById('quiz-screen').classList.remove('hidden');
+            document.getElementById('login-screen').classList.add('hidden');
+            document.getElementById('student-info-display').textContent = `${student.name} - ${student.class}`;
+            restartButton.disabled = false;
+            actionButton.disabled = false;
             roundStartedAt = Date.now();
             roundFinishedAt = null;
             currentQuestions = shuffle([...questionsData]);
@@ -279,11 +300,18 @@
             results = { correct: 0, wrong: 0 };
             loadQuestion();
             window.scrollTo(0, 0);
+            return true;
         }
 
         function loadQuestion() {
             hasAnswered = false;
-            timeLeft = 30;
+            timeLeft = selectedExam ? selectedExam.seconds : 30;
+            const questionText = document.getElementById('question-text');
+            const optionsContainer = document.getElementById('options-container');
+            const feedbackExplanation = document.getElementById('feedback-explanation');
+            if (window.MathJax && typeof MathJax.typesetClear === 'function') {
+                MathJax.typesetClear([questionText, optionsContainer, feedbackExplanation]);
+            }
             
             document.getElementById('timer').textContent = `${timeLeft}s`;
             document.getElementById('question-progress').textContent = `Câu ${currentIndex + 1}/${currentQuestions.length}`;
@@ -292,15 +320,15 @@
             document.getElementById('btn-restart-round').classList.add('hidden');
             
             const q = currentQuestions[currentIndex];
-            document.getElementById('question-text').innerHTML = q.q;
+            questionText.innerHTML = safeQuestionHtml(q.q);
             
-            const optionsContainer = document.getElementById('options-container');
             optionsContainer.innerHTML = '';
             
             // --- BẮT ĐẦU PHẦN TRỘN ĐÁP ÁN ---
             // 1. Tách đáp án khỏi tiền tố A, B, C, D gốc và lưu lại vị trí đúng
             let optionsObj = q.options.map((opt, idx) => ({
                 text: opt.replace(/^[A-D]\.\s*/, ''), 
+                original: idx,
                 isCorrect: (idx === q.correct)
             }));
 
@@ -309,6 +337,8 @@
 
             // 3. Cập nhật lại vị trí đáp án đúng sau khi trộn
             q.currentCorrectIndex = optionsObj.findIndex(o => o.isCorrect);
+            q.optionOrder = optionsObj.map(o=>o.original);
+            q.selectedOriginal = -1;
 
             // 4. In ra giao diện và gắn lại A, B, C, D theo thứ tự mới
             optionsObj.forEach((opt, idx) => {
@@ -316,14 +346,16 @@
                 btn.className = 'w-full text-left p-3 border rounded-lg hover:bg-blue-50 transition duration-200 option-btn text-gray-700 bg-white';
                 
                 const letter = String.fromCharCode(65 + idx); // Tự động tạo chữ A (65), B (66), C (67), D (68)
-                btn.innerHTML = `${letter}. ${opt.text}`;
+                btn.innerHTML = `${letter}. ${safeQuestionHtml(opt.text)}`;
                 
                 btn.onclick = () => selectOption(idx, btn, q);
                 optionsContainer.appendChild(btn);
             });
             // --- KẾT THÚC PHẦN TRỘN ĐÁP ÁN ---
 
-            if (window.MathJax && typeof MathJax.typesetPromise === 'function') MathJax.typesetPromise().catch(console.error);
+            if (window.MathJax && typeof MathJax.typesetPromise === 'function') {
+                MathJax.typesetPromise([questionText, optionsContainer]).catch(console.error);
+            }
 
             clearInterval(timerInterval);
             timerInterval = setInterval(() => {
@@ -343,6 +375,7 @@
             clearInterval(timerInterval);
             
             // Kiểm tra tính đúng/sai dựa trên vị trí mới đã trộn
+            q.selectedOriginal = q.optionOrder[selectedIndex];
             const isCorrect = selectedIndex === q.currentCorrectIndex;
             
             if (isCorrect) {
@@ -375,12 +408,14 @@
             
             const fbContainer = document.getElementById('feedback-container');
             document.getElementById('feedback-title').textContent = title;
-            document.getElementById('feedback-explanation').innerHTML = `<strong>Cách giải:</strong> ${question.explanation}`;
+            const explanation = document.getElementById('feedback-explanation');
+            if (window.MathJax && typeof MathJax.typesetClear === 'function') MathJax.typesetClear([explanation]);
+            explanation.innerHTML = `<strong>Đáp án đúng: ${String.fromCharCode(65 + question.currentCorrectIndex)}.</strong><br><strong>Lời giải:</strong> ${safeQuestionHtml(question.explanation)}`;
             fbContainer.classList.remove('hidden');
             
             document.getElementById('btn-next').classList.remove('hidden');
             document.getElementById('btn-restart-round').classList.remove('hidden');
-            if (window.MathJax && typeof MathJax.typesetPromise === 'function') MathJax.typesetPromise().catch(console.error);
+            if (window.MathJax && typeof MathJax.typesetPromise === 'function') MathJax.typesetPromise([fbContainer]).catch(console.error);
         }
 
         window.restartRoundNow = function() {
@@ -388,7 +423,7 @@
             if (!hasAnswered || restartButton.classList.contains('hidden')) return;
             restartButton.classList.add('hidden');
             retryCount++;
-            startRound();
+            startRound().then(started => { if (!started) retryCount--; });
         };
 
         window.nextQuestion = function() {
@@ -407,6 +442,7 @@
             document.getElementById('result-screen').classList.remove('hidden');
             
             document.getElementById('result-student').textContent = `${student.name} - ${student.class}`;
+            document.getElementById('result-exam-name').textContent = selectedExam.name;
             document.getElementById('result-correct').textContent = results.correct;
             document.getElementById('result-wrong').textContent = results.wrong;
             document.getElementById('result-retries').textContent = (retryCount + 1) + " vòng";
@@ -426,7 +462,7 @@
                 btnAction.textContent = "Làm lại vòng nữa";
                 btnAction.onclick = () => {
                     retryCount++;
-                    startRound();
+                    startRound().then(started => { if (!started) retryCount--; });
                 };
             } else {
                 // ĐẠT 12/12
@@ -444,7 +480,12 @@
                 btnAction.onclick = showLeaderboard;
                 if (!completedPayload) {
                     completedPayload = {
-                        schema: 2,
+                        schema: 5,
+                        uid: authUser.uid,
+                        sessionId: activeSessionId,
+                        answers: currentQuestions.map(q=>({id:q.id,choice:q.selectedOriginal})),
+                        examId: selectedExam.id,
+                        examName: selectedExam.name,
                         attemptId: (window.crypto && typeof window.crypto.randomUUID === 'function') ? window.crypto.randomUUID() : 'quiz_' + Date.now() + '_' + Math.random().toString(36).slice(2),
                         name: student.name,
                         className: student.class,
@@ -455,7 +496,7 @@
                         correct: 12,
                         total: 12
                     };
-                    try { localStorage.setItem('quiz9_pending_v2', JSON.stringify(completedPayload)); } catch (_) {}
+                    try { localStorage.setItem(pendingKey(), JSON.stringify(completedPayload)); } catch (_) {}
                 }
                 document.getElementById('btn-retake-result').classList.remove('hidden');
                 document.getElementById('retake-note').classList.remove('hidden');
@@ -465,35 +506,139 @@
         function durationLabel(seconds) {
             return `${Math.floor(seconds / 60)} phút ${seconds % 60} giây`;
         }
-        function leaderboardRequest() {
-            return new Promise((resolve, reject) => {
-                const callback = 'quizCb_' + Date.now() + '_' + Math.random().toString(36).slice(2);
-                const script = document.createElement('script');
-                let done = false;
-                const cleanup = () => {
-                    clearTimeout(timeout);
-                    script.remove();
-                    // A late response after timeout must not call a deleted function.
-                    window[callback] = () => {};
-                    setTimeout(() => { delete window[callback]; }, 60000);
-                };
-                const finish = (error, data) => {
-                    if (done) return;
-                    done = true; cleanup();
-                    error ? reject(error) : resolve(data);
-                };
-                const timeout = setTimeout(() => finish(new Error('Kết nối quá thời gian. Hãy thử lại.')), 12000);
-                window[callback] = data => data && data.ok ? finish(null, data) : finish(new Error(data && data.error || 'Chưa đọc được bảng xếp hạng.'));
-                script.onerror = () => finish(new Error('Không kết nối được bảng xếp hạng.'));
-                const url = new URL(GOOGLE_SCRIPT_URL);
-                url.searchParams.set('action', 'leaderboard');
-                url.searchParams.set('attemptId', completedPayload.attemptId);
-                url.searchParams.set('callback', callback);
-                url.searchParams.set('_', Date.now());
-                script.src = url.toString();
-                document.head.appendChild(script);
-            });
+        async function leaderboardRequest() {
+            const examId = completedPayload.examId || 'DE01';
+            const data = await apiRequest('leaderboard', {examId, attemptId: completedPayload.attemptId});
+            if (data.examId !== examId) throw new Error('Bảng xếp hạng chưa đúng ải. Vui lòng thử lại.');
+            return data;
         }
+        let authUser=null, accountProfile=null, teacherProfiles=[], authVersion=0, authBusy=false;
+        const firebaseConfig={apiKey:'AIzaSyDoaPGrDZG8UeEiOTQpBu98eoyPsR6KoDU',authDomain:'he-thong-vuot-ai-toan-9.firebaseapp.com',projectId:'he-thong-vuot-ai-toan-9',storageBucket:'he-thong-vuot-ai-toan-9.firebasestorage.app',messagingSenderId:'711701248089',appId:'1:711701248089:web:151863565bc67e37c85948'};
+        let firebaseAuth=null;
+        const pendingKey=()=> 'vuot_ai_auth_v1_'+(authUser?authUser.uid:'signed-out');
+        let bridgePromise=null,bridgePort=null;
+        const pendingRequests=new Map();
+        function connectBridge(){
+          if(bridgePromise)return bridgePromise;
+          bridgePromise=new Promise((resolve,reject)=>{
+            const channel=Array.from(crypto.getRandomValues(new Uint8Array(32)),x=>x.toString(16).padStart(2,'0')).join('');
+            const frame=document.createElement('iframe');frame.hidden=true;frame.title='Kết nối máy chủ';
+            let accepted=false;
+            const timeout=setTimeout(()=>{window.removeEventListener('message',listen);frame.remove();bridgePromise=null;reject(new Error('Không kết nối được Apps Script. Hãy kiểm tra đã triển khai phiên bản mới và quyền truy cập “Bất kỳ ai”.'));},30000);
+            function listen(e){
+              if(accepted||!e.data||e.data.type!=='quiz-bridge-ready'||e.data.channel!==channel||!(e.origin==='https://script.google.com'||/^https:\/\/(?:[a-z0-9-]+\.)*googleusercontent\.com$/.test(e.origin)))return;
+              accepted=true;
+              const pair=new MessageChannel();bridgePort=pair.port1;
+              bridgePort.onmessage=event=>{
+                const m=event.data;
+                if(m&&m.type==='connected'){clearTimeout(timeout);window.removeEventListener('message',listen);resolve(bridgePort);return;}
+                const request=m&&pendingRequests.get(m.id);if(!request)return;
+                clearTimeout(request.timeout);pendingRequests.delete(m.id);
+                m.data&&m.data.ok?request.resolve(m.data):request.reject(new Error(m.data&&m.data.error||'Chưa đọc được dữ liệu.'));
+              };
+              bridgePort.start();e.source.postMessage({type:'quiz-connect',channel},e.origin,[pair.port2]);
+            }
+            window.addEventListener('message',listen);
+            const url=new URL(GOOGLE_SCRIPT_URL);url.searchParams.set('action','bridge');url.searchParams.set('channel',channel);frame.src=url.href;document.body.appendChild(frame);
+          });return bridgePromise;
+        }
+        async function apiRequest(action,params={}){
+          const user=authUser;if(!user)throw new Error('Vui lòng đăng nhập Google.');
+          const port=await connectBridge(),token=await user.getIdToken();
+          if(authUser!==user)throw new Error('Tài khoản đã thay đổi. Hãy tải lại trang.');
+          return new Promise((resolve,reject)=>{
+            const id=crypto.randomUUID();
+            const timeout=setTimeout(()=>{pendingRequests.delete(id);reject(new Error('Máy chủ phản hồi chậm. Hãy thử lại.'));},45000);
+            pendingRequests.set(id,{resolve,reject,timeout});port.postMessage({id,action,params,token});
+          });
+        }
+        function authMessage(text){document.getElementById('auth-status').textContent=text;}
+        async function loginGoogle(){
+          if(!firebaseAuth){authMessage('Chưa tải được đăng nhập Google. Kiểm tra Internet rồi tải lại trang.');return;}
+          const button=document.getElementById('google-login');button.disabled=true;
+          try{const provider=new firebase.auth.GoogleAuthProvider();provider.setCustomParameters({prompt:'select_account'});await firebaseAuth.signInWithPopup(provider);}
+          catch(error){authMessage(error.code==='auth/popup-closed-by-user'?'Cửa sổ đăng nhập đã đóng. Bấm đăng nhập để thử lại.':error.code==='auth/unauthorized-domain'?'Tên miền website chưa được thêm vào Firebase → Authentication → Settings → Authorized domains.':'Không đăng nhập được ('+(error.code||error.message)+'). Hãy mở trang bằng Chrome hoặc Safari, cho phép cửa sổ bật lên rồi thử lại.');}
+          finally{button.disabled=false;}
+        }
+        async function logoutGoogle(){
+          if(document.getElementById('quiz-screen').classList.contains('hidden')===false&&!confirm('Đăng xuất sẽ kết thúc lượt đang làm. Em có muốn tiếp tục?'))return;
+          await firebaseAuth.signOut();location.reload();
+        }
+        async function refreshIdentity(){
+          if(!authUser||authBusy)return;authBusy=true;const version=authVersion;
+          document.getElementById('auth-refresh').disabled=true;authMessage('Đang kiểm tra hồ sơ…');
+          try{
+            const data=await apiRequest('me');if(version!==authVersion)return;
+            accountProfile=data.profile;
+            document.getElementById('account-label').textContent=(data.teacher?'Giáo viên · ':accountProfile?accountProfile.name+' · ':'')+data.email;
+            document.getElementById('profile-form').classList.add('hidden');
+            if(data.teacher){document.getElementById('auth-screen').classList.add('hidden');document.getElementById('teacher-screen').classList.remove('hidden');await loadProfiles();return;}
+            if(accountProfile&&accountProfile.status==='approved'){
+              document.getElementById('student-name').value=accountProfile.name;document.getElementById('student-class').value=accountProfile.className;
+              document.getElementById('auth-screen').classList.add('hidden');document.getElementById('login-screen').classList.remove('hidden');
+              restorePending();await loadExamCatalog();return;
+            }
+            if(accountProfile&&accountProfile.status==='pending'){
+              authMessage('Hồ sơ '+accountProfile.name+' · '+accountProfile.className+' đang chờ giáo viên duyệt. Sau khi được duyệt, bấm “Kiểm tra lại trạng thái hồ sơ”.');
+            }else{
+              authMessage(accountProfile?'Giáo viên yêu cầu sửa: '+accountProfile.note:'Điền hồ sơ để giáo viên xác nhận trước khi làm bài.');
+              document.getElementById('profile-form').classList.remove('hidden');
+              document.getElementById('profile-name').value=accountProfile?accountProfile.name:authUser.displayName||'';
+              document.getElementById('profile-class').value=accountProfile?accountProfile.className:'';
+              document.getElementById('profile-dob').value=accountProfile?accountProfile.dob:'';
+            }
+          }catch(error){authMessage(error.message);}finally{authBusy=false;document.getElementById('auth-refresh').disabled=false;}
+        }
+        async function submitProfile(event){
+          event.preventDefault();const button=document.getElementById('profile-submit');button.disabled=true;authMessage('Đang gửi hồ sơ…');
+          try{await apiRequest('saveProfile',{name:document.getElementById('profile-name').value,className:document.getElementById('profile-class').value,dob:document.getElementById('profile-dob').value});await refreshIdentity();}
+          catch(error){authMessage(error.message);}finally{button.disabled=false;}
+        }
+        async function loadProfiles(){
+          const button=document.getElementById('teacher-refresh');button.disabled=true;
+          document.getElementById('teacher-status').textContent='Đang tải hồ sơ…';
+          try{const data=await apiRequest('listProfiles');teacherProfiles=data.profiles;renderProfiles();}
+          catch(error){document.getElementById('teacher-status').textContent=error.message;}finally{button.disabled=false;}
+        }
+        function renderProfiles(){
+          const list=document.getElementById('profiles-list');list.replaceChildren();
+          const query=document.getElementById('profile-search').value.trim().toLocaleLowerCase('vi'),filter=document.getElementById('profile-filter').value;
+          const rows=teacherProfiles.filter(p=>(!filter||p.status===filter)&&[p.name,p.className,p.email].join(' ').toLocaleLowerCase('vi').includes(query));
+          document.getElementById('teacher-status').textContent=rows.length+' hồ sơ · '+teacherProfiles.filter(p=>p.status==='pending').length+' đang chờ duyệt';
+          for(const p of rows){
+            const card=document.createElement('article');card.className='border rounded-xl p-4';
+            const heading=document.createElement('h2');heading.className='font-bold text-lg';heading.textContent=p.name+' · '+p.className;card.appendChild(heading);
+            const info=document.createElement('p');info.className='text-sm break-all mt-2';info.textContent=p.email+' · Ngày sinh: '+p.dob.split('-').reverse().join('/')+' · '+({pending:'Chờ duyệt',approved:'Đã duyệt',changes_requested:'Cần sửa'}[p.status]||p.status);card.appendChild(info);
+            const note=document.createElement('textarea');note.className='w-full border rounded-lg p-2 mt-3';note.placeholder='Ghi chú / nội dung cần sửa';note.setAttribute('aria-label','Ghi chú cho '+p.name);note.maxLength=500;note.value=p.note||'';card.appendChild(note);
+            const actions=document.createElement('div');actions.className='flex gap-3 mt-2';
+            for(const [status,label] of [['approved','Duyệt hồ sơ'],['changes_requested','Yêu cầu sửa']]){
+              if(status==='approved'&&p.status==='approved')continue;
+              const button=document.createElement('button');button.className='rounded-lg px-3 py-2 '+(status==='approved'?'bg-green-700 text-white':'bg-orange-100 text-orange-900');button.textContent=label;
+              button.onclick=async()=>{
+                if(status==='changes_requested'&&!note.value.trim()){alert('Hãy ghi nội dung cần sửa.');return;}
+                if(!confirm(label+' cho '+p.name+' ('+p.className+')?'))return;
+                actions.querySelectorAll('button').forEach(b=>b.disabled=true);
+                try{await apiRequest('reviewProfile',{uid:p.uid,revision:p.revision,status,note:note.value});await loadProfiles();}
+                catch(error){document.getElementById('teacher-status').textContent=error.message;actions.querySelectorAll('button').forEach(b=>b.disabled=false);}
+              };actions.appendChild(button);
+            }card.appendChild(actions);list.appendChild(card);
+          }
+        }
+        function initializeGoogle(){
+          if(!window.firebase){authMessage('Chưa tải được Firebase. Kiểm tra kết nối và tải lại trang.');return;}
+          firebase.initializeApp(firebaseConfig);firebaseAuth=firebase.auth();firebaseAuth.languageCode='vi';
+          firebaseAuth.onAuthStateChanged(async user=>{
+            if(authUser && (!user || user.uid!==authUser.uid)){location.reload();return;}
+            authVersion++;authUser=user;clearInterval(timerInterval);
+            ['login-screen','quiz-screen','result-screen','leaderboard-screen','teacher-screen','profile-form'].forEach(id=>document.getElementById(id).classList.add('hidden'));
+            document.getElementById('auth-screen').classList.remove('hidden');
+            document.getElementById('account-bar').classList.toggle('hidden',!user);
+            document.getElementById('google-login').classList.toggle('hidden',!!user);
+            document.getElementById('auth-refresh').classList.toggle('hidden',!user);
+            if(user)await refreshIdentity();else authMessage('Đăng nhập để bắt đầu.');
+          });
+        }
+
         function saveCompletedResult() {
             if (!completedPayload) return Promise.resolve(false);
             if (resultSaved) return Promise.resolve(true);
@@ -504,30 +649,20 @@
             document.getElementById('btn-save-retry').classList.add('hidden');
             savingPromise = (async () => {
                 try {
-                    const controller = new AbortController();
-                    const timer = setTimeout(() => controller.abort(), 12000);
-                    try {
-                        await fetch(GOOGLE_SCRIPT_URL, {
-                            method: 'POST', mode: 'no-cors', signal: controller.signal,
-                            headers: {'Content-Type': 'text/plain;charset=utf-8'},
-                            body: JSON.stringify(completedPayload)
-                        });
-                    } catch (_) {
-                        // The server may have saved despite a network timeout. Confirm by ID.
-                    } finally { clearTimeout(timer); }
+                    await apiRequest('saveResult', completedPayload);
                     for (let check = 0; check < 4; check++) {
                         const data = await leaderboardRequest();
                         if (data.saved) {
                             resultSaved = true;
                             status.textContent = 'Đã lưu kết quả vào bảng của giáo viên.';
-                            try { localStorage.removeItem('quiz9_pending_v2'); } catch (_) {}
+                            try { localStorage.removeItem(pendingKey()); } catch (_) {}
                             return true;
                         }
                         if (check < 3) await new Promise(resolve => setTimeout(resolve, 1800));
                     }
                     throw new Error('Chưa xác nhận được kết quả đã lưu.');
                 } catch (error) {
-                    status.textContent = 'Chưa lưu được kết quả hoặc chưa nhận được xác nhận. Bấm “Gửi lại kết quả”.';
+                    status.textContent = error.message + ' Bấm “Gửi lại kết quả” để thử lại.';
                     document.getElementById('btn-save-retry').classList.remove('hidden');
                     return false;
                 } finally { savingPromise = null; updateRetakeButtons(); }
@@ -535,6 +670,7 @@
             return savingPromise;
         }
         function renderLeaderboard(data) {
+            document.getElementById('rank-exam-name').textContent = data.examName || completedPayload.examName;
             const body = document.getElementById('rank-body');
             body.replaceChildren();
             function addRow(row) {
@@ -566,6 +702,7 @@
             document.getElementById('rank-refresh').disabled = true;
             updateRetakeButtons();
             document.getElementById('rank-status').textContent = 'Đang tải bảng xếp hạng…';
+            document.getElementById('rank-exam-name').textContent = completedPayload.examName || 'Ải 01 – Ôn tập giữa kỳ I';
             window.scrollTo(0, 0);
             try {
                 if (!(await saveCompletedResult())) throw new Error('Chưa lưu được kết quả. Hãy trở lại kết quả để gửi lại.');
@@ -589,10 +726,15 @@
             if (!resultSaved || savingPromise || rankLoading || !completedPayload) return;
             const name = completedPayload.name;
             const className = completedPayload.className;
+            const previousExamId = completedPayload.examId || 'DE01';
             clearInterval(timerInterval);
-            try { localStorage.removeItem('quiz9_pending_v2'); } catch (_) {}
+            try { localStorage.removeItem(pendingKey()); } catch (_) {}
             student = {name: '', class: ''};
+            selectedExam = null;
+            questionsData = [];
             startedAtISO = null;
+            activeSessionId = null;
+            pendingRoundId = null;
             completedPayload = null;
             resultSaved = false;
             savingPromise = null;
@@ -605,7 +747,7 @@
             wrongCounts = {};
             currentQuestions = [];
             currentIndex = 0;
-            timeLeft = 30;
+            timeLeft = selectedExam ? selectedExam.seconds : 30;
             hasAnswered = false;
             results = {correct: 0, wrong: 0};
             ['quiz-screen', 'result-screen', 'leaderboard-screen', 'result-stats',
@@ -617,6 +759,7 @@
             document.getElementById('rank-status').textContent = '';
             document.getElementById('student-name').value = name;
             document.getElementById('student-class').value = className;
+            document.getElementById('exam-select').value = previousExamId;
             document.getElementById('login-screen').classList.remove('hidden');
             updateRetakeButtons();
             window.scrollTo(0, 0);
@@ -626,11 +769,59 @@
             document.getElementById('leaderboard-screen').classList.add('hidden');
             document.getElementById('result-screen').classList.remove('hidden');
         }
-        // Recover an unsent completed result after an accidental refresh.
+        function safeQuestionHtml(text) {
+            // Sheet content is text + LaTeX. Only explicit line breaks are accepted as markup.
+            return String(text).replace(/<br\s*\/?\s*>/gi, '\n')
+                .replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;')
+                .replace(/\r?\n/g, '<br>');
+        }
+        async function loadExamCatalog() {
+            if (catalogLoading || startingQuiz) return;
+            catalogLoading = true;
+            const select = document.getElementById('exam-select');
+            const status = document.getElementById('catalog-status');
+            const previous = completedPayload ? (completedPayload.examId || 'DE01') : select.value;
+            select.disabled = true;
+            document.getElementById('btn-start').disabled = true;
+            status.textContent = 'Đang tải danh sách ải…';
+            try {
+                const data = await apiRequest('catalog');
+                if (!Array.isArray(data.exams)) throw new Error('Hệ thống chưa được cập nhật danh sách ải.');
+                examCatalog = data.exams;
+                select.replaceChildren();
+                for (const exam of examCatalog) {
+                    const option = document.createElement('option');
+                    option.value = exam.id;
+                    option.textContent = `${exam.name} · 12 câu · ${exam.seconds} giây/câu`;
+                    select.appendChild(option);
+                }
+                if (examCatalog.some(e => e.id === previous)) select.value = previous;
+                else if (examCatalog.length) select.value = examCatalog[0].id;
+                status.textContent = examCatalog.length
+                    ? 'Mỗi ải có bảng xếp hạng riêng.'
+                    : 'Chưa có ải sẵn sàng. Vui lòng liên hệ giáo viên.';
+            } catch (error) {
+                examCatalog = [];
+                select.replaceChildren();
+                status.textContent = 'Chưa tải được danh sách ải. ' + error.message;
+            } finally {
+                catalogLoading = false;
+                select.disabled = !examCatalog.length;
+                document.getElementById('btn-start').disabled = !examCatalog.length;
+            }
+        }
+
+        function restorePending(){
+        // Recover only results belonging to the currently signed-in account.
         try {
-            const pending = JSON.parse(localStorage.getItem('quiz9_pending_v2') || 'null');
-            if (pending && pending.schema === 2 && pending.correct === 12 && pending.total === 12 && Number.isInteger(pending.durationSeconds) && pending.durationSeconds > 0 && Number.isInteger(pending.rounds) && pending.rounds > 0) {
+            const pending = JSON.parse(localStorage.getItem(pendingKey()) || 'null');
+            if (pending && [4, 5].includes(pending.schema) && authUser && pending.uid === authUser.uid && pending.correct === 12 && pending.total === 12 && Number.isInteger(pending.durationSeconds) && pending.durationSeconds > 0 && Number.isInteger(pending.rounds) && pending.rounds > 0) {
+                pending.examId = pending.examId || 'DE01';
+                pending.examName = pending.examName || 'Ải 01 – Ôn tập giữa kỳ I';
+                pending.name = accountProfile.name;
+                pending.className = accountProfile.className;
                 completedPayload = pending;
+                document.getElementById('result-exam-name').textContent = pending.examName;
                 document.getElementById('login-screen').classList.add('hidden');
                 document.getElementById('result-screen').classList.remove('hidden');
                 document.getElementById('result-title').textContent = 'Vượt Ải Thành Công!';
@@ -654,6 +845,8 @@
             }
         } catch (_) {}
 
+        }
+        initializeGoogle();
     </script>
 </body>
 </html>
